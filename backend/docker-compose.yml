@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  mrt-review-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mrt-review-backend
+    ports:
+      - "8000:8000"
+    environment:
+      # LLM API Keys (set these in your .env file or override here)
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
+      - QWEN_API_KEY=${QWEN_API_KEY:-}
+      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY:-}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
+      - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION:-2024-02-15-preview}
+      # Configuration file path (optional)
+      - MRT_REVIEW_CONFIG=${MRT_REVIEW_CONFIG:-/app/app/config.yaml}
+    volumes:
+      # Mount logs directory for persistence
+      - ./logs:/app/logs
+      # Optional: mount config.yaml for easy updates
+      - ./app/config.yaml:/app/app/config.yaml:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+

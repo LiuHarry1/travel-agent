@@ -1,0 +1,16 @@
+{
+  "tools": [
+    {
+      "name": "faq",
+      "type": "faq",
+      "description": "Search travel FAQ knowledge base for answers to common travel questions"
+    },
+    {
+      "name": "retriever",
+      "type": "retriever",
+      "description": "Retrieve relevant information from vectorized knowledge database containing travel documents, guides, and resources"
+    }
+  ],
+  "servers": {}
+}
+

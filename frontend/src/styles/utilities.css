@@ -1,0 +1,76 @@
+/* ===== Responsive ===== */
+@media (max-width: 768px) {
+  .top-bar {
+    padding: 0 1rem;
+  }
+
+  .user-name {
+    font-size: 0.875rem;
+  }
+
+  .user-role {
+    font-size: 0.75rem;
+  }
+
+  .sidebar {
+    width: 100%;
+    max-width: 280px;
+  }
+
+  .main-content.with-sidebar {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .sidebar.visible {
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3);
+  }
+
+  .chat-top-bar {
+    padding: 1rem;
+  }
+
+  .chat-title {
+    font-size: 1.1rem;
+  }
+
+  .chat-subtitle {
+    font-size: 0.8rem;
+  }
+
+  .chat-messages-wrapper {
+    padding: 1rem;
+  }
+
+  .chat-input-container {
+    padding: 1rem;
+  }
+
+  .review-container {
+    padding: 1.5rem 1rem;
+  }
+}
+
+/* ===== Scrollbar Styling ===== */
+.chat-messages-wrapper::-webkit-scrollbar {
+  width: 8px;
+}
+
+.chat-messages-wrapper::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-messages-wrapper::-webkit-scrollbar-thumb {
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+}
+
+.chat-messages-wrapper::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Extra space at bottom so last message actions (copy/feedback) are not hidden behind input */
+.chat-scroll-anchor {
+  height: 9rem; /* ensure last message actions sit fully above fixed input bar */
+  flex-shrink: 0;
+}
