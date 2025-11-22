@@ -241,6 +241,11 @@ Answer user questions about travel planning, destinations, visas, accommodations
                                     
                                     try:
                                         import asyncio
+                                        import sys
+                                        # Fix for Windows: Ensure ProactorEventLoop is used for subprocess support
+                                        if sys.platform == "win32":
+                                            if hasattr(asyncio, "WindowsProactorEventLoopPolicy"):
+                                                asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
                                         try:
                                             loop = asyncio.get_event_loop()
                                         except RuntimeError:

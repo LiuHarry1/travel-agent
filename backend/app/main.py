@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import sys
@@ -9,6 +10,15 @@ import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+# Fix for Windows: Use ProactorEventLoop for subprocess support (required by MCP SDK)
+# ProactorEventLoop is the default on Windows 3.8+ and supports subprocess
+# This must be set before any event loop is created
+if sys.platform == "win32":
+    # Windows ProactorEventLoop supports subprocess operations
+    # Set the policy before any event loop is created
+    if hasattr(asyncio, "WindowsProactorEventLoopPolicy"):
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 # Ensure backend directory is in sys.path for imports
 _backend_dir = Path(__file__).parent.parent
@@ -78,6 +88,11 @@ app.include_router(chat_router)
 
 def main():
     """启动 FastAPI 应用"""
+    # Fix for Windows: Ensure ProactorEventLoop is set before uvicorn starts
+    if sys.platform == "win32":
+        if hasattr(asyncio, "WindowsProactorEventLoopPolicy"):
+            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+    
     # 使用导入字符串以支持 reload 功能
     # Use DEBUG level if LOG_LEVEL env var is set to DEBUG
     uvicorn_log_level = "debug" if os.getenv("LOG_LEVEL", "INFO").upper() == "DEBUG" else "info"

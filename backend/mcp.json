@@ -8,9 +8,9 @@
       "command": "python",
       "args": ["-m", "app.mcp.travel_doc_retriever.server"]
     },
-    "tavily-mcp": {
-      "command": "npx",
-      "args": ["-y", "@tavily-ai/tavily-mcp"],
+    "tavily": {
+      "command": "python",
+      "args": ["-m", "app.mcp.tavily.server"],
       "env": {
         "TAVILY_API_KEY": "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"
       }

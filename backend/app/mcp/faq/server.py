@@ -83,5 +83,10 @@ if __name__ == "__main__":
     )
     
     # Run the server using stdio transport
-    asyncio.run(stdio_server(app))
+    # stdio_server() returns a context manager that yields (read_stream, write_stream)
+    async def run_server():
+        async with stdio_server() as streams:
+            await app.run(streams[0], streams[1], app.create_initialization_options())
+    
+    asyncio.run(run_server())
 

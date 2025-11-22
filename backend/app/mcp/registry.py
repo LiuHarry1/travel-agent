@@ -34,113 +34,50 @@ class MCPToolRegistry:
     def __init__(self, config_path: Optional[str] = None):
         """Initialize registry with tools from MCP servers."""
         self.tools: Dict[str, Dict[str, Any]] = {}
-        self._tool_implementations: Dict[str, Any] = {}
         self._tool_to_server: Dict[str, str] = {}  # Map tool name to server name
+        self._mcp_clients: Dict[str, MCPClient] = {}  # Map server name to MCP client
         self._load_tools_from_servers(config_path)
     
     def _load_tools_from_servers(self, config_path: Optional[str] = None) -> None:
-        """Load tool definitions from MCP servers (both internal Python modules and external servers)."""
+        """Load tool definitions from MCP servers using standard MCP SDK."""
         config = load_mcp_config(config_path)
         servers = config.get("mcpServers", {})
         
         logger.info(f"[MCPToolRegistry] Loading tools from {len(servers)} MCP servers")
         
-        # Map server names to their modules (internal Python servers)
-        server_modules = {
-            "faq": ("app.mcp.faq.server", "faq"),
-            "travel-doc-retriever": ("app.mcp.travel_doc_retriever.server", "retriever")
-        }
-        
-        # Separate internal and external servers
+        # All servers (internal and external) are connected via MCP client
         self._mcp_clients: Dict[str, MCPClient] = {}
         
-        # Load tools from each server
+        # Get backend directory for setting working directory
+        from pathlib import Path
+        backend_dir = Path(__file__).parent.parent.parent
+        
+        # Create MCP clients for all servers
         for server_name, server_config in servers.items():
             try:
                 command = server_config.get("command", "")
                 args = server_config.get("args", [])
                 env = server_config.get("env", {})
                 
-                # Check if it's an internal Python server (command is "python" and args start with "-m")
-                is_internal = command == "python" and args and len(args) >= 2 and args[0] == "-m"
+                # Set working directory to backend directory for Python module servers
+                # This ensures Python can find the 'app' module
+                cwd = None
+                if command == "python" and args and len(args) >= 2 and args[0] == "-m":
+                    # Python module server - set cwd to backend directory
+                    cwd = str(backend_dir)
+                    logger.info(f"[MCPToolRegistry] Setting cwd to {cwd} for Python module server: {server_name}")
                 
-                if is_internal:
-                    # Load from internal Python module
-                    module_path = args[1]
-                    if server_name not in server_modules:
-                        # Try to get from args
-                        if not module_path.startswith("app.mcp."):
-                            logger.warning(f"[MCPToolRegistry] Skipping internal server {server_name} (not in app.mcp)")
-                            continue
-                    
-                    # Import the server module and get tools
-                    import importlib
-                    module = importlib.import_module(module_path)
-                    
-                    # Get the app (Server instance) from the module
-                    if hasattr(module, "app"):
-                        # Call list_tools handler directly
-                        import asyncio
-                        import inspect
-                        try:
-                            loop = asyncio.get_event_loop()
-                        except RuntimeError:
-                            loop = asyncio.new_event_loop()
-                            asyncio.set_event_loop(loop)
-                        
-                        # Find the list_tools function in the module
-                        list_tools_func = None
-                        for name, obj in inspect.getmembers(module):
-                            if (inspect.isfunction(obj) or inspect.iscoroutinefunction(obj)) and name == "list_tools":
-                                list_tools_func = obj
-                                break
-                        
-                        if list_tools_func:
-                            # Call the async function
-                            if inspect.iscoroutinefunction(list_tools_func):
-                                tools = loop.run_until_complete(list_tools_func())
-                            else:
-                                tools = list_tools_func()
-                        else:
-                            logger.warning(f"[MCPToolRegistry] Could not find list_tools function in {module_path}")
-                            continue
-                        
-                        for tool in tools:
-                            tool_name = tool.name if hasattr(tool, 'name') else tool.get("name", "")
-                            if tool_name:
-                                # Convert Tool object to dict
-                                tool_dict = {
-                                    "name": tool_name,
-                                    "description": tool.description if hasattr(tool, 'description') else tool.get("description", ""),
-                                    "inputSchema": tool.inputSchema if hasattr(tool, 'inputSchema') else tool.get("inputSchema", {})
-                                }
-                                self.tools[tool_name] = tool_dict
-                                self._tool_to_server[tool_name] = server_name
-                                
-                                # Also load the tool implementation for direct calling
-                                if server_name == "faq":
-                                    from .faq.tool import FAQTool
-                                    self._tool_implementations[tool_name] = FAQTool()
-                                elif server_name == "travel-doc-retriever":
-                                    from .travel_doc_retriever.tool import RetrieverTool
-                                    self._tool_implementations[tool_name] = RetrieverTool()
-                                
-                                logger.info(f"[MCPToolRegistry] Loaded tool '{tool_name}' from internal server '{server_name}'")
-                
-                else:
-                    # External MCP server - use MCP client to connect
-                    logger.info(f"[MCPToolRegistry] Setting up MCP client for external server: {server_name}")
-                    env = server_config.get("env", {})
-                    client = MCPClient(command, args, env=env)
-                    # Store client for later initialization
-                    self._mcp_clients[server_name] = client
-                    # Note: We'll initialize and load tools lazily when needed
-                    logger.info(f"[MCPToolRegistry] MCP client created for external server '{server_name}' (will load tools on first use)")
+                # All servers use MCP client (standard MCP protocol)
+                logger.info(f"[MCPToolRegistry] Setting up MCP client for server: {server_name}")
+                client = MCPClient(command, args, env=env, cwd=cwd)
+                # Store client for later initialization
+                self._mcp_clients[server_name] = client
+                logger.info(f"[MCPToolRegistry] MCP client created for server '{server_name}' (will load tools on first use)")
                 
             except Exception as e:
-                logger.error(f"[MCPToolRegistry] Failed to load tools from server {server_name}: {e}", exc_info=True)
+                logger.error(f"[MCPToolRegistry] Failed to create MCP client for server {server_name}: {e}", exc_info=True)
         
-        logger.info(f"[MCPToolRegistry] Total tools loaded: {len(self.tools)} (internal: {len(self.tools)}, external clients: {len(self._mcp_clients)})")
+        logger.info(f"[MCPToolRegistry] Created {len(self._mcp_clients)} MCP clients (tools will be loaded on first use)")
     
     def list_tools(self) -> List[MCPToolConfig]:
         """List all registered tools (returns MCPToolConfig for backward compatibility)."""
@@ -158,11 +95,30 @@ class MCPToolRegistry:
         """List all registered tools as dictionaries."""
         return list(self.tools.values())
     
-    async def _ensure_external_tools_loaded(self) -> None:
-        """Lazily load tools from external MCP servers."""
+    async def _ensure_tools_loaded(self) -> None:
+        """Lazily load tools from all MCP servers (both internal and external)."""
+        # Check MCP SDK availability at runtime (not just at module import time)
+        import sys
+        try:
+            from mcp import ClientSession, StdioServerParameters
+            from mcp.client.stdio import stdio_client
+            mcp_available = True
+            logger.info(f"[MCPToolRegistry] MCP SDK is available. Python version: {sys.version}")
+        except ImportError as e:
+            mcp_available = False
+            logger.error(f"[MCPToolRegistry] MCP SDK import failed: {e}. Python version: {sys.version}, Python path: {sys.executable}")
+        
+        if not mcp_available:
+            logger.error(f"[MCPToolRegistry] MCP SDK not available. Please install mcp package (requires Python >= 3.10).")
+            logger.error(f"[MCPToolRegistry] Current Python: {sys.executable}, Version: {sys.version}")
+            raise RuntimeError(f"MCP SDK not available. Please install mcp package (requires Python >= 3.10) to use MCP servers.")
+        
         for server_name, client in self._mcp_clients.items():
             try:
                 if not client._initialized:
+                    # Check if MCP SDK is available and _server_params is set
+                    # If _server_params is None, the client will recreate it in initialize()
+                    logger.info(f"[MCPToolRegistry] Initializing MCP client for server: {server_name}")
                     await client.initialize()
                     
                     # Get tools from this server
@@ -172,14 +128,22 @@ class MCPToolRegistry:
                         if tool_name and tool_name not in self.tools:
                             self.tools[tool_name] = tool
                             self._tool_to_server[tool_name] = server_name
-                            logger.info(f"[MCPToolRegistry] Loaded tool '{tool_name}' from external server '{server_name}'")
+                            logger.info(f"[MCPToolRegistry] Loaded tool '{tool_name}' from server '{server_name}'")
                 
+            except RuntimeError as e:
+                if "MCP SDK not available" in str(e):
+                    logger.error(f"[MCPToolRegistry] MCP SDK not available for server '{server_name}'. Please install mcp package (requires Python >= 3.10).")
+                    raise
+                else:
+                    logger.error(f"[MCPToolRegistry] Failed to load tools from server {server_name}: {e}")
+                    logger.warning(f"[MCPToolRegistry] Continuing with other servers despite failure of {server_name}")
             except Exception as e:
-                logger.error(f"[MCPToolRegistry] Failed to load tools from external server {server_name}: {e}", exc_info=True)
+                logger.error(f"[MCPToolRegistry] Failed to load tools from server {server_name}: {e}")
+                logger.warning(f"[MCPToolRegistry] Continuing with other servers despite failure of {server_name}")
     
     async def call_tool(self, tool_call: ToolCall) -> ToolResult:
         """
-        Execute a tool call using direct tool implementation or MCP client.
+        Execute a tool call using MCP client (standard MCP protocol).
         
         Args:
             tool_call: Tool call request
@@ -189,44 +153,10 @@ class MCPToolRegistry:
         """
         logger.info(f"[MCPToolRegistry] Calling tool: {tool_call.name} with arguments: {tool_call.arguments}")
         
-        # Ensure external tools are loaded
-        await self._ensure_external_tools_loaded()
+        # Ensure tools are loaded from all servers
+        await self._ensure_tools_loaded()
         
-        # Check if it's an internal tool (has direct implementation)
-        tool_impl = self._tool_implementations.get(tool_call.name)
-        
-        if tool_impl:
-            # Internal tool - call directly
-            try:
-                if hasattr(tool_impl, "execute"):
-                    result = await tool_impl.execute(tool_call.arguments)
-                    server_name = self._tool_to_server.get(tool_call.name, "unknown")
-                    logger.info(f"[MCPToolRegistry] Tool '{tool_call.name}' executed successfully (from internal server '{server_name}')")
-                else:
-                    error_msg = f"Tool '{tool_call.name}' does not have execute method"
-                    logger.error(f"[MCPToolRegistry] {error_msg}")
-                    return ToolResult(
-                        tool_name=tool_call.name,
-                        success=False,
-                        result=None,
-                        error=error_msg
-                    )
-                
-                return ToolResult(
-                    tool_name=tool_call.name,
-                    success=True,
-                    result=result
-                )
-            except Exception as e:
-                logger.error(f"[MCPToolRegistry] Error executing tool {tool_call.name}: {e}", exc_info=True)
-                return ToolResult(
-                    tool_name=tool_call.name,
-                    success=False,
-                    result=None,
-                    error=str(e)
-                )
-        
-        # External tool - use MCP client
+        # Find which server this tool belongs to
         server_name = self._tool_to_server.get(tool_call.name)
         if not server_name:
             error_msg = f"Tool '{tool_call.name}' not found. Available tools: {list(self.tools.keys())}"
@@ -250,9 +180,9 @@ class MCPToolRegistry:
             )
         
         try:
-            # Call tool via MCP client
+            # Call tool via MCP client (standard MCP protocol)
             result = await client.call_tool(tool_call.name, tool_call.arguments)
-            logger.info(f"[MCPToolRegistry] Tool '{tool_call.name}' executed successfully via external server '{server_name}'")
+            logger.info(f"[MCPToolRegistry] Tool '{tool_call.name}' executed successfully via server '{server_name}'")
             
             return ToolResult(
                 tool_name=tool_call.name,
@@ -276,8 +206,8 @@ class MCPToolRegistry:
         Returns:
             List of function definitions in OpenAI format
         """
-        # Ensure external tools are loaded
-        await self._ensure_external_tools_loaded()
+        # Ensure tools are loaded from all servers
+        await self._ensure_tools_loaded()
         
         functions = []
         for tool in self.tools.values():
@@ -295,6 +225,12 @@ class MCPToolRegistry:
     def get_tool_function_definitions_sync(self) -> list[Dict[str, Any]]:
         """Synchronous wrapper for get_tool_function_definitions."""
         import asyncio
+        import sys
+        # Fix for Windows: Ensure ProactorEventLoop is used for subprocess support
+        if sys.platform == "win32":
+            if hasattr(asyncio, "WindowsProactorEventLoopPolicy"):
+                asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+        
         try:
             loop = asyncio.get_event_loop()
         except RuntimeError:
