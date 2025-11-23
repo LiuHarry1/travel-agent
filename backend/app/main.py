@@ -39,11 +39,9 @@ from app.api import (
     admin_router,
     chat_router,
     common_router,
-    setup_chat_routes,
 )
+from app.core.container import get_container
 from app.logger import setup_logging
-from app.llm import LLMClient
-from app.service.chat import ChatService
 
 # Configure logging to output to both console and file
 # Use DEBUG level in development if LOG_LEVEL env var is set to DEBUG
@@ -82,49 +80,46 @@ app.add_middleware(
     allow_headers=['*'],
 )
 
-# Initialize services
-llm_client = LLMClient()
-chat_service = ChatService(llm_client=llm_client)
+# Initialize container
+container = get_container()
 
-# Pre-warm MCP clients by loading tool definitions at startup
-# This initializes all MCP servers and caches them for faster subsequent requests
+# Pre-warm services at startup
 @app.on_event("startup")
-async def pre_warm_mcp_clients():
-    """Pre-warm MCP clients at application startup to improve first request performance."""
+async def startup_event():
+    """Initialize services at application startup."""
     import logging
     import sys
     import asyncio
     logger = logging.getLogger(__name__)
     
     # On Windows, check if we can use subprocess with current event loop
-    # If not, skip pre-warming and let it initialize on first use
     if sys.platform == "win32":
         try:
             loop = asyncio.get_running_loop()
-            # Check if current loop supports subprocess (ProactorEventLoop does)
-            # If not, we'll skip pre-warming to avoid NotImplementedError
             if not isinstance(loop, asyncio.ProactorEventLoop):
                 logger.info("Current event loop is not ProactorEventLoop. Skipping pre-warm (will initialize on first use).")
                 return
         except RuntimeError:
-            # No running loop, skip pre-warming
             logger.info("No running event loop. Skipping pre-warm (will initialize on first use).")
             return
     
     try:
-        logger.info("Pre-warming MCP clients...")
-        # Load tool definitions asynchronously (since we're in an async context)
-        # This initializes all MCP servers and caches them
-        functions = await chat_service.mcp_registry.get_tool_function_definitions()
-        logger.info(f"MCP clients pre-warmed successfully. Loaded {len(functions)} tools.")
+        await container.initialize()
     except NotImplementedError as e:
-        # Windows subprocess issue - skip pre-warming
-        logger.info(f"Skipping pre-warm due to Windows subprocess limitation: {e}. MCP clients will initialize on first use.")
+        logger.info(f"Skipping pre-warm due to Windows subprocess limitation: {e}. Services will initialize on first use.")
     except Exception as e:
-        logger.warning(f"Failed to pre-warm MCP clients: {e}. They will be initialized on first use.", exc_info=True)
+        logger.warning(f"Failed to initialize services: {e}. They will be initialized on first use.", exc_info=True)
 
-# Setup routes with service dependencies
-setup_chat_routes(chat_service=chat_service)
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup services at application shutdown."""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        await container.shutdown()
+    except Exception as e:
+        logger.error(f"Error during shutdown: {e}", exc_info=True)
 
 # Register routers
 app.include_router(common_router)

@@ -27,10 +27,10 @@ def format_tool_result(result: Any) -> str:
         if "error" in result:
             return f"Error: {result['error']}"
         
-        # Format common result patterns
-        # For Tavily-like results: check if both answer and results exist
+        # Format common result patterns based on data structure (tool-agnostic)
+        # For results with both answer and results fields: combine them
+        # This pattern can be used by any tool, not specific to any tool name
         if "answer" in result and "results" in result:
-            # Tavily returns both answer and results - combine them
             answer = result.get("answer", "")
             results = result.get("results", [])
             
@@ -56,13 +56,14 @@ def format_tool_result(result: Any) -> str:
             
             return "\n".join(parts)
         
-        # For FAQ-like results: just answer with optional metadata
+        # For results with answer field only: format answer with optional metadata
+        # This pattern can be used by any tool that returns an answer field
         if "answer" in result:
-            # Handle None answer (when FAQ doesn't find a match)
+            # Handle None answer (when tool doesn't find a match)
             answer = result["answer"]
             if answer is None:
-                # FAQ didn't find answer - return message if available
-                message = result.get("message", "FAQ知识库中没有找到匹配的答案。")
+                # Tool didn't find answer - return message if available
+                message = result.get("message", "未找到匹配的答案。")
                 text = message
             else:
                 text = answer or ""
@@ -73,7 +74,8 @@ def format_tool_result(result: Any) -> str:
                 text += f"\n(Source: {result['source']})"
             return text
         
-        # For retriever-like results: list of results
+        # For results with results field only: format as list of results
+        # This pattern can be used by any tool that returns a list of results
         if "results" in result:
             query = result.get("query", "")
             results = result.get("results", [])

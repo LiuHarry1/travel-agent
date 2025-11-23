@@ -9,7 +9,7 @@ This module implements a refactored and optimized MCP (Model Context Protocol) a
 ### Directory Structure
 
 ```
-app/mcp/
+app/mcp_tools/
 ├── core/                    # Core infrastructure
 │   ├── base_tool.py         # BaseMCPTool abstract base class
 │   ├── base_server.py       # BaseMCPServer base class
@@ -18,12 +18,10 @@ app/mcp/
 ├── tools/                   # Tool implementations
 │   ├── faq_tool.py          # FAQ search tool
 │   ├── retriever_tool.py    # Document retrieval tool
-│   ├── tavily_tool.py       # Tavily web search tool
 │   └── __init__.py
 ├── servers/                 # Server implementations
 │   ├── faq_server.py        # FAQ MCP server
 │   ├── retriever_server.py  # Retriever MCP server
-│   ├── tavily_server.py     # Tavily MCP server
 │   └── __init__.py
 ├── utils/                   # Utility functions
 │   ├── result_formatter.py  # Result formatting utilities
@@ -32,11 +30,10 @@ app/mcp/
 │   └── server.py
 ├── travel_doc_retriever/    # Backward compatibility entry points
 │   └── server.py
-├── tavily/                  # Backward compatibility entry points
-│   └── server.py
 ├── client.py                # MCP client for connecting to servers
 ├── config.py                # MCP configuration loader
-└── registry.py              # Tool registry and execution manager
+├── registry.py              # Tool registry and execution manager
+└── server_manager.py        # Server manager for external/local server handling
 ```
 
 ## Core Components
@@ -58,7 +55,7 @@ Abstract base class for all MCP tools. Provides:
 
 **Example:**
 ```python
-from app.mcp.core.base_tool import BaseMCPTool, ToolExecutionResult
+from app.mcp_tools.core.base_tool import BaseMCPTool, ToolExecutionResult
 
 class MyTool(BaseMCPTool):
     def __init__(self):
@@ -99,8 +96,8 @@ Base class for MCP servers. Provides:
 
 **Example:**
 ```python
-from app.mcp.core.base_server import BaseMCPServer
-from app.mcp.tools.my_tool import MyTool
+from app.mcp_tools.core.base_server import BaseMCPServer
+from app.mcp_tools.tools.my_tool import MyTool
 
 server = BaseMCPServer(
     server_name="my-server",
@@ -136,11 +133,11 @@ Manages connections to multiple MCP servers and provides unified tool discovery 
 
 ### Step 1: Create Tool Implementation
 
-Create a new file in `app/mcp/tools/`:
+Create a new file in `app/mcp_tools/tools/`:
 
 ```python
-# app/mcp/tools/my_new_tool.py
-from app.mcp.core.base_tool import BaseMCPTool, ToolExecutionResult
+# app/mcp_tools/tools/my_new_tool.py
+from app.mcp_tools.core.base_tool import BaseMCPTool, ToolExecutionResult
 
 class MyNewTool(BaseMCPTool):
     def __init__(self):
@@ -168,12 +165,12 @@ class MyNewTool(BaseMCPTool):
 
 ### Step 2: Create Server
 
-Create a new file in `app/mcp/servers/`:
+Create a new file in `app/mcp_tools/servers/`:
 
 ```python
-# app/mcp/servers/my_new_server.py
-from app.mcp.core.base_server import BaseMCPServer
-from app.mcp.tools.my_new_tool import MyNewTool
+# app/mcp_tools/servers/my_new_server.py
+from app.mcp_tools.core.base_server import BaseMCPServer
+from app.mcp_tools.tools.my_new_tool import MyNewTool
 
 def create_my_new_server() -> BaseMCPServer:
     tools = [MyNewTool()]
@@ -189,8 +186,8 @@ if __name__ == "__main__":
 Create a new directory and entry point:
 
 ```python
-# app/mcp/my_new/server.py
-from app.mcp.servers.my_new_server import create_my_new_server
+# app/mcp_tools/my_new/server.py
+from app.mcp_tools.servers.my_new_server import create_my_new_server
 
 server = create_my_new_server()
 app = server.app

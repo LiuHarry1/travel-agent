@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 from ..config import get_config, reload_config
 from ..llm.provider import LLMProvider
-from ..mcp.config import load_mcp_config
+from ..mcp_tools.config import load_mcp_config
 from ..utils.exceptions import format_error_message
 
 router = APIRouter()
@@ -312,22 +312,38 @@ def update_mcp_config(request: MCPConfigUpdateRequest) -> Dict[str, Any]:
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(request.config, f, indent=2, ensure_ascii=False)
         
-        # Reload MCP registry
+        # Reload MCP registry (gracefully closes old connections, reinitializes everything)
         from ..api.chat import get_chat_service
+        import asyncio
         try:
             chat_service = get_chat_service()
-            chat_service.mcp_registry.reload_config(str(config_path))
+            # reload_config is now async, need to run it
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            loop.run_until_complete(chat_service.mcp_registry.reload_config(str(config_path)))
+            
+            # Get updated server info
+            server_info = chat_service.mcp_registry.server_manager.list_servers()
+            
+            return {
+                "status": "success",
+                "message": "MCP configuration updated and reloaded successfully",
+                "server_count": len(request.config.get("mcpServers", {})),
+                "tool_count": len(chat_service.mcp_registry.tools),
+                "servers": server_info
+            }
         except Exception as e:
-            # Log error but don't fail the request
+            # Log error and fail the request
             import logging
             logger = logging.getLogger(__name__)
-            logger.warning(f"Failed to reload MCP registry: {e}")
-        
-        return {
-            "status": "success",
-            "message": "MCP configuration updated successfully",
-            "server_count": len(request.config.get("mcpServers", {}))
-        }
+            logger.error(f"Failed to reload MCP registry: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Configuration saved but failed to reload: {str(e)}"
+            )
     except HTTPException:
         raise
     except Exception as exc:

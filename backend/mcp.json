@@ -2,17 +2,18 @@
   "mcpServers": {
     "faq": {
       "command": "python",
-      "args": ["-m", "app.mcp.faq.server"]
+      "args": ["-m", "app.mcp_tools.faq.server"]
     },
     "travel-doc-retriever": {
       "command": "python",
-      "args": ["-m", "app.mcp.travel_doc_retriever.server"]
+      "args": ["-m", "app.mcp_tools.travel_doc_retriever.server"]
     },
     "tavily-mcp": {
       "command": "npx",
       "args": ["-y", "tavily-mcp@0.1.4"],
       "env": {
-        "TAVILY_API_KEY": "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"
+        "TAVILY_API_KEY": "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",
+        "TAVILY_MAX_RESULTS": "5"
       }
     }
   }

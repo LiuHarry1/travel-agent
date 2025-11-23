@@ -64,7 +64,7 @@ def test_tool_execution():
     
     # Test FAQ tool
     print("\nTesting FAQ tool...")
-    from app.mcp import ToolCall
+    from app.mcp_tools import ToolCall
     import asyncio
     
     faq_call = ToolCall(

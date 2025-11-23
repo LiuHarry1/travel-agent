@@ -1,2 +1,0 @@
-"""Tavily MCP server package."""
-
