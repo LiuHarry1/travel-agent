@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
@@ -58,7 +59,51 @@ setup_logging(
 
 load_dotenv()
 
-app = FastAPI(title="Travel Agent", version="1.0.0")
+# Initialize container
+container = get_container()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Lifespan event handler for FastAPI application.
+    Handles startup and shutdown events.
+    """
+    logger = logging.getLogger(__name__)
+    
+    # Startup
+    # On Windows, check if we can use subprocess with current event loop
+    if sys.platform == "win32":
+        try:
+            loop = asyncio.get_running_loop()
+            if not isinstance(loop, asyncio.ProactorEventLoop):
+                logger.info("Current event loop is not ProactorEventLoop. Skipping pre-warm (will initialize on first use).")
+            else:
+                try:
+                    await container.initialize()
+                except NotImplementedError as e:
+                    logger.info(f"Skipping pre-warm due to Windows subprocess limitation: {e}. Services will initialize on first use.")
+                except Exception as e:
+                    logger.warning(f"Failed to initialize services: {e}. They will be initialized on first use.", exc_info=True)
+        except RuntimeError:
+            logger.info("No running event loop. Skipping pre-warm (will initialize on first use).")
+    else:
+        # Non-Windows platforms
+        try:
+            await container.initialize()
+        except Exception as e:
+            logger.warning(f"Failed to initialize services: {e}. They will be initialized on first use.", exc_info=True)
+    
+    yield
+    
+    # Shutdown
+    try:
+        await container.shutdown()
+    except Exception as e:
+        logger.error(f"Error during shutdown: {e}", exc_info=True)
+
+
+app = FastAPI(title="Travel Agent", version="1.0.0", lifespan=lifespan)
 
 # CORS configuration
 # Allow origins from environment variable, or default to allow all origins
@@ -79,47 +124,6 @@ app.add_middleware(
     allow_methods=['*'],
     allow_headers=['*'],
 )
-
-# Initialize container
-container = get_container()
-
-# Pre-warm services at startup
-@app.on_event("startup")
-async def startup_event():
-    """Initialize services at application startup."""
-    import logging
-    import sys
-    import asyncio
-    logger = logging.getLogger(__name__)
-    
-    # On Windows, check if we can use subprocess with current event loop
-    if sys.platform == "win32":
-        try:
-            loop = asyncio.get_running_loop()
-            if not isinstance(loop, asyncio.ProactorEventLoop):
-                logger.info("Current event loop is not ProactorEventLoop. Skipping pre-warm (will initialize on first use).")
-                return
-        except RuntimeError:
-            logger.info("No running event loop. Skipping pre-warm (will initialize on first use).")
-            return
-    
-    try:
-        await container.initialize()
-    except NotImplementedError as e:
-        logger.info(f"Skipping pre-warm due to Windows subprocess limitation: {e}. Services will initialize on first use.")
-    except Exception as e:
-        logger.warning(f"Failed to initialize services: {e}. They will be initialized on first use.", exc_info=True)
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup services at application shutdown."""
-    import logging
-    logger = logging.getLogger(__name__)
-    
-    try:
-        await container.shutdown()
-    except Exception as e:
-        logger.error(f"Error during shutdown: {e}", exc_info=True)
 
 # Register routers
 app.include_router(common_router)

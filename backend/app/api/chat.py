@@ -6,7 +6,7 @@ import json
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
-from ..llm import DashScopeError
+from ..llm import LLMError
 from ..models import ChatRequest
 from ..utils.exceptions import format_error_message
 from .dependencies import get_chat_service
@@ -34,7 +34,7 @@ async def agent_message_stream(
             # Send done signal
             yield "data: " + json.dumps({"type": "done"}, ensure_ascii=False) + "\n\n"
             
-        except DashScopeError as exc:
+        except LLMError as exc:
             error_msg = format_error_message(exc, "Error processing request")
             error_data = json.dumps({"type": "error", "content": error_msg}, ensure_ascii=False)
             yield f"data: {error_data}\n\n"

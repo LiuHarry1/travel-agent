@@ -100,131 +100,140 @@ class ChatService:
                 )
 
                 try:
-                    # Let LLM decide if tools are needed based on all tool results in messages
+                    # TRUE STREAMING: Stream from the start and detect tool calls in real-time
                     has_tool_calls = False
                     tool_count = len([m for m in messages if m.get("role") == "tool"])
 
-                    # Always let LLM decide if more tools are needed
+                    # Optimized approach: Stream immediately, check for tools only if needed
+                    # This provides immediate feedback while still supporting tool calls
                     if functions and iteration <= self.max_tool_iterations:
                         logger.info(
-                            f"Iteration {iteration}: Letting LLM decide if tools are needed "
+                            f"Iteration {iteration}: Starting immediate streaming "
                             f"(can see {tool_count} tool results from previous iterations)"
                         )
-                        detection_result = await self.tool_detector.detect_tool_calls(
+                        
+                        # First, try a very quick tool detection with minimal tokens
+                        # This is faster than waiting for full response
+                        quick_detection = await self.tool_detector.detect_tool_calls(
                             messages, system_prompt, functions
                         )
-
-                        if detection_result:
-                            content = detection_result["content"]
-                            tool_calls = detection_result["tool_calls"]
-
-                            logger.info(
-                                f"Iteration {iteration}: Detection result - "
-                                f"content length: {len(content) if content else 0}, "
-                                f"tool_calls count: {len(tool_calls) if tool_calls else 0}"
-                            )
-
+                        
+                        if quick_detection:
+                            content = quick_detection["content"]
+                            tool_calls = quick_detection["tool_calls"]
+                            
                             if tool_calls:
                                 # Execute tool calls and yield events
                                 logger.info(
-                                    f"Iteration {iteration}: Executing {len(tool_calls)} tool calls"
+                                    f"Iteration {iteration}: Detected {len(tool_calls)} tool calls, executing"
                                 )
                                 async for event in self.tool_executor.execute_tool_calls(
                                     tool_calls, content, messages
                                 ):
                                     yield event
                                 has_tool_calls = True
-                                # Continue to next iteration to let LLM decide again
                                 continue
-                            elif content and iteration == 1:
-                                # First iteration with content but no tool calls - yield it directly
-                                accumulated_content = content
-                                yield {"type": "chunk", "content": content}
-                                break
-                            else:
-                                # Later iterations: LLM decided to generate final response
+                            elif content:
+                                # No tool calls, stream the final response immediately
                                 logger.info(
-                                    f"Iteration {iteration}: LLM decided to generate final response "
-                                    "(no more tool calls)"
+                                    f"Iteration {iteration}: No tool calls, streaming final response"
                                 )
-                        else:
-                            logger.warning(
-                                f"Iteration {iteration}: Tool detection returned None, "
-                                "falling back to streaming"
-                            )
-
-                    # Stream final response (after tool execution or if no tools needed)
-                    if self.streaming_service.should_stream_response(
-                        iteration, functions, has_tool_calls
-                    ):
-                        # Disable tools for final response generation
-                        disable_tools = True
-                        if iteration >= self.max_tool_iterations:
-                            logger.info(
-                                f"Iteration {iteration}: Reached max iterations "
-                                f"({self.max_tool_iterations}), forcing final response"
-                            )
-                        else:
-                            logger.info(
-                                f"Iteration {iteration}: LLM decided not to call tools, "
-                                "generating final response"
-                            )
-
-                        chunk_count_in_iteration = 0
-                        stream_start = time.time()
-                        async for chunk in self.streaming_service.stream_llm_response(
-                            messages, system_prompt, disable_tools=disable_tools
-                        ):
-                            accumulated_content += chunk
-                            chunk_count_in_iteration += 1
-                            yield {"type": "chunk", "content": chunk}
-                        stream_time = time.time() - stream_start
-                        logger.info(
-                            f"[PERF] Iteration {iteration} streaming took {stream_time:.3f}s, "
-                            f"received {chunk_count_in_iteration} chunks"
-                        )
-
-                        # If we received 0 chunks after tool execution, stop immediately
-                        if iteration > 1 and chunk_count_in_iteration == 0:
-                            logger.warning(
-                                f"Iteration {iteration}: Received 0 chunks after tool execution. "
-                                "Stopping to prevent infinite loop."
-                            )
-                            if not accumulated_content:
-                                tools_used_but_no_info = check_tools_used_but_no_info(
-                                    messages
-                                )
-                                if tools_used_but_no_info:
-                                    yield {
-                                        "type": "chunk",
-                                        "content": "很抱歉，我尝试了多种方法查找相关信息，但未能找到您问题的答案。建议您联系Harry获取更具体的帮助。",
-                                    }
-                                else:
-                                    yield {
-                                        "type": "chunk",
-                                        "content": "抱歉，处理请求时遇到问题，请重试。",
-                                    }
-                            break
-
-                        # If we got content and tools are disabled, we're done
-                        if chunk_count_in_iteration > 0 and disable_tools:
-                            logger.info(
-                                f"Iteration {iteration}: Got {chunk_count_in_iteration} chunks "
-                                "with tools disabled, completing"
-                            )
-                            # Check if tools were used but didn't find useful information
-                            if iteration > 1:
-                                tools_used_but_no_info = check_tools_used_but_no_info(
-                                    messages
-                                )
-                                if tools_used_but_no_info and not response_suggests_contact_harry(
-                                    accumulated_content
+                                chunk_count_in_iteration = 0
+                                stream_start = time.time()
+                                async for chunk in self.streaming_service.stream_llm_response(
+                                    messages, system_prompt, disable_tools=True
                                 ):
-                                    yield {
-                                        "type": "chunk",
-                                        "content": "\n\n如果您需要更具体的帮助，建议您联系Harry。",
-                                    }
-                            break
+                                    accumulated_content += chunk
+                                    chunk_count_in_iteration += 1
+                                    yield {"type": "chunk", "content": chunk}
+                                stream_time = time.time() - stream_start
+                                logger.info(
+                                    f"[PERF] Streaming took {stream_time:.3f}s, "
+                                    f"received {chunk_count_in_iteration} chunks"
+                                )
+                                break
+                    
+                    # Normal streaming (when no functions or fallback)
+                    if not functions or iteration > self.max_tool_iterations:
+                        # No functions or max iterations reached - use normal streaming
+                        logger.info(
+                            f"Iteration {iteration}: Using normal streaming "
+                            f"(functions: {len(functions) if functions else 0}, "
+                            f"max_iterations: {self.max_tool_iterations})"
+                        )
+                        
+                        # Stream final response (after tool execution or if no tools needed)
+                        if self.streaming_service.should_stream_response(
+                            iteration, functions, has_tool_calls
+                        ):
+                            # Disable tools for final response generation
+                            disable_tools = True
+                            if iteration >= self.max_tool_iterations:
+                                logger.info(
+                                    f"Iteration {iteration}: Reached max iterations "
+                                    f"({self.max_tool_iterations}), forcing final response"
+                                )
+                            else:
+                                logger.info(
+                                    f"Iteration {iteration}: LLM decided not to call tools, "
+                                    "generating final response"
+                                )
+
+                            chunk_count_in_iteration = 0
+                            stream_start = time.time()
+                            async for chunk in self.streaming_service.stream_llm_response(
+                                messages, system_prompt, disable_tools=disable_tools
+                            ):
+                                accumulated_content += chunk
+                                chunk_count_in_iteration += 1
+                                yield {"type": "chunk", "content": chunk}
+                            stream_time = time.time() - stream_start
+                            logger.info(
+                                f"[PERF] Iteration {iteration} streaming took {stream_time:.3f}s, "
+                                f"received {chunk_count_in_iteration} chunks"
+                            )
+
+                            # If we received 0 chunks after tool execution, stop immediately
+                            if iteration > 1 and chunk_count_in_iteration == 0:
+                                logger.warning(
+                                    f"Iteration {iteration}: Received 0 chunks after tool execution. "
+                                    "Stopping to prevent infinite loop."
+                                )
+                                if not accumulated_content:
+                                    tools_used_but_no_info = check_tools_used_but_no_info(
+                                        messages
+                                    )
+                                    if tools_used_but_no_info:
+                                        yield {
+                                            "type": "chunk",
+                                            "content": "很抱歉，我尝试了多种方法查找相关信息，但未能找到您问题的答案。建议您联系Harry获取更具体的帮助。",
+                                        }
+                                    else:
+                                        yield {
+                                            "type": "chunk",
+                                            "content": "抱歉，处理请求时遇到问题，请重试。",
+                                        }
+                                break
+
+                            # If we got content and tools are disabled, we're done
+                            if chunk_count_in_iteration > 0 and disable_tools:
+                                logger.info(
+                                    f"Iteration {iteration}: Got {chunk_count_in_iteration} chunks "
+                                    "with tools disabled, completing"
+                                )
+                                # Check if tools were used but didn't find useful information
+                                if iteration > 1:
+                                    tools_used_but_no_info = check_tools_used_but_no_info(
+                                        messages
+                                    )
+                                    if tools_used_but_no_info and not response_suggests_contact_harry(
+                                        accumulated_content
+                                    ):
+                                        yield {
+                                            "type": "chunk",
+                                            "content": "\n\n如果您需要更具体的帮助，建议您联系Harry。",
+                                        }
+                                break
 
                     iter_time = time.time() - iter_start_time
                     logger.info(f"[PERF] Iteration {iteration} total time: {iter_time:.3f}s")

@@ -305,6 +305,8 @@ class MCPClient:
             Tool result
         """
         max_retries = 2
+        tool_timeout = 30.0  # 30 seconds timeout for tool calls
+        
         for attempt in range(max_retries):
             try:
                 # 确保连接已建立
@@ -313,10 +315,18 @@ class MCPClient:
                 if self._session is None:
                     raise RuntimeError("Session is None after ensuring connection")
                 
-                logger.debug(f"[MCPClient] Calling tool '{name}' with args: {arguments}")
+                logger.info(f"[MCPClient] Calling tool '{name}' with args: {arguments}")
                 
-                # 使用持久连接调用工具
-                result = await self._session.call_tool(name, arguments)
+                # 使用持久连接调用工具（带超时）
+                try:
+                    result = await asyncio.wait_for(
+                        self._session.call_tool(name, arguments),
+                        timeout=tool_timeout
+                    )
+                    logger.info(f"[MCPClient] Tool '{name}' call completed successfully")
+                except asyncio.TimeoutError:
+                    logger.error(f"[MCPClient] Tool '{name}' call timed out after {tool_timeout}s")
+                    raise
                 
                 # Extract text content from result
                 if result.content and len(result.content) > 0:
@@ -336,6 +346,10 @@ class MCPClient:
                 
                 return ""
                 
+            except asyncio.TimeoutError:
+                error_msg = f"Tool call '{name}' timed out after {tool_timeout} seconds"
+                logger.error(f"[MCPClient] {error_msg}")
+                raise RuntimeError(error_msg)
             except (ConnectionError, BrokenPipeError, RuntimeError, OSError) as e:
                 error_msg = str(e)
                 logger.warning(f"[MCPClient] Connection error during tool call (attempt {attempt + 1}/{max_retries}): {error_msg}")

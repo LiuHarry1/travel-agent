@@ -1,5 +1,4 @@
 """MCP utilities."""
-from .result_formatter import format_tool_result
-
-__all__ = ["format_tool_result"]
+# This module is currently empty but kept for future utilities
+__all__ = []
 

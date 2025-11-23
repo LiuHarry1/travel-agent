@@ -267,28 +267,6 @@ class MCPToolRegistry:
         logger.info(f"[MCPToolRegistry] Generated {len(functions)} function definitions from MCP servers")
         return functions
     
-    def get_tool_function_definitions_sync(self) -> list[Dict[str, Any]]:
-        """
-        Synchronous wrapper for get_tool_function_definitions.
-        
-        Returns:
-            List of function definitions in OpenAI format
-        """
-        import asyncio
-        import sys
-        # Fix for Windows: Ensure ProactorEventLoop is used for subprocess support
-        if sys.platform == "win32":
-            if hasattr(asyncio, "WindowsProactorEventLoopPolicy"):
-                asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-        
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        
-        return loop.run_until_complete(self.get_tool_function_definitions())
-    
     async def reload_config(self, config_path: Optional[str] = None) -> None:
         """
         Reload MCP configuration and reinitialize servers.

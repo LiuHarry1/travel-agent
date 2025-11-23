@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -59,32 +59,4 @@ def load_mcp_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Failed to load MCP config: {e}")
         return {"tools": [], "servers": {}}
-
-
-def get_mcp_tools(config_path: Optional[str] = None) -> List[MCPToolConfig]:
-    """
-    Get list of MCP tool configurations.
-    
-    Args:
-        config_path: Path to mcp.json file
-        
-    Returns:
-        List of MCPToolConfig objects
-    """
-    config = load_mcp_config(config_path)
-    tools = []
-    
-    for tool_data in config.get("tools", []):
-        if not isinstance(tool_data, dict):
-            continue
-        name = tool_data.get("name", "")
-        tool_type = tool_data.get("type", "")
-        description = tool_data.get("description", "")
-        
-        if name and tool_type:
-            # Extract any extra fields
-            extra = {k: v for k, v in tool_data.items() if k not in ("name", "type", "description")}
-            tools.append(MCPToolConfig(name, tool_type, description, **extra))
-    
-    return tools
 

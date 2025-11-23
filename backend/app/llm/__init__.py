@@ -3,9 +3,7 @@ from .client import LLMClient
 from .factory import LLMClientFactory
 from .provider import LLMError, LLMProvider
 
-# Backward compatibility
-CompletionClient = LLMClient
-ChatbotClient = LLMClient
+# Backward compatibility (only for existing code)
 DashScopeError = LLMError
 
 __all__ = [
@@ -13,8 +11,6 @@ __all__ = [
     "LLMClientFactory",
     "LLMError",
     "LLMProvider",
-    "CompletionClient",  # Backward compatibility
-    "ChatbotClient",     # Backward compatibility
-    "DashScopeError",    # Backward compatibility
+    "DashScopeError",  # Backward compatibility
 ]
 

@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "example-binary": {
+      "command": "/path/to/mcp-server-binary",
+      "args": ["--config", "/path/to/config.json"]
+    },
+    "example-script": {
+      "command": "bash",
+      "args": ["/path/to/mcp-server.sh"],
+      "env": {
+        "ENV_VAR": "value"
+      }
+    }
+  }
+}
+
+

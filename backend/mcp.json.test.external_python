@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "example-external-python": {
+      "command": "python",
+      "args": ["-m", "some_external_mcp_package.server"],
+      "env": {
+        "API_KEY": "your-api-key-here"
+      }
+    }
+  }
+}
+
+

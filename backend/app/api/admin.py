@@ -265,9 +265,10 @@ def get_mcp_config() -> MCPConfigResponse:
         # Count tools (we need to load them from registry)
         # For now, just return server count
         # Tool count will be approximate since tools are loaded lazily
-        from ..api.chat import get_chat_service
+        from ..core.container import get_container
         try:
-            chat_service = get_chat_service()
+            container = get_container()
+            chat_service = container.chat_service
             tool_count = len(chat_service.mcp_registry.tools)
         except Exception:
             # If registry not available, return 0
@@ -313,10 +314,11 @@ def update_mcp_config(request: MCPConfigUpdateRequest) -> Dict[str, Any]:
             json.dump(request.config, f, indent=2, ensure_ascii=False)
         
         # Reload MCP registry (gracefully closes old connections, reinitializes everything)
-        from ..api.chat import get_chat_service
+        from ..core.container import get_container
         import asyncio
         try:
-            chat_service = get_chat_service()
+            container = get_container()
+            chat_service = container.chat_service
             # reload_config is now async, need to run it
             try:
                 loop = asyncio.get_event_loop()

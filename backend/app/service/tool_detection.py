@@ -82,7 +82,7 @@ class ToolDetectionService:
             payload = client._normalize_payload(all_messages, model=client.model)
             payload["functions"] = functions
             payload["function_call"] = "auto"
-            payload["max_tokens"] = 300  # Reduced from 500 to 300 for faster tool detection
+            payload["max_tokens"] = 150  # Reduced to 150 for very fast tool detection
             payload_time = time.time() - payload_start
             logger.info(f"[PERF] Tool detection payload preparation took {payload_time:.3f}s")
             

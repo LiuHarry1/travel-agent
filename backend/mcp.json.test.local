@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "faq": {
+      "command": "python",
+      "args": ["-m", "app.mcp_tools.faq.server"]
+    },
+    "travel-doc-retriever": {
+      "command": "python",
+      "args": ["-m", "app.mcp_tools.travel_doc_retriever.server"]
+    }
+  }
+}
+
+
