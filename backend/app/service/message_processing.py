@@ -89,9 +89,29 @@ class MessageProcessingService:
 Available Tools:
 {tool_list}
 
-Use the available tools when you need specific information to answer user questions. Each tool's description and parameters contain detailed usage instructions.
+CRITICAL INSTRUCTIONS FOR USING TOOLS:
+1. Use the available tools when you need specific information to answer user questions. Each tool's description and parameters contain detailed usage instructions.
 
-Important: If you have tried using the available tools but still cannot provide a helpful answer to the user's travel-related question, politely inform the user that you could not find the information and suggest they contact Harry for more specific assistance."""
+2. WHEN TOOL RESULTS ARE PROVIDED:
+   - You MUST base your answer STRICTLY on the tool output results
+   - DO NOT add information that is not in the tool results
+   - DO NOT make up or invent facts, figures, or details not provided by tools
+   - Present the information from tool results accurately and clearly
+   - If tool results contain specific details, use those exact details in your answer
+
+3. WHEN NO TOOL RESULTS ARE FOUND:
+   - Clearly state that you could not find the information
+   - DO NOT guess or provide unverified information
+   - Suggest trying alternative tools if available
+   - If all tools have been tried without success, politely inform the user that you could not find the information and suggest they contact Harry for more specific assistance.
+
+4. ANSWER GENERATION:
+   - Your answer should be a clear, helpful response based ONLY on tool outputs
+   - If tool results provide a complete answer, use it directly (rephrase naturally if needed)
+   - Do not add speculation, assumptions, or information beyond what tools provide
+   - If you are unsure, it is better to say "I don't have that information" than to guess
+
+Remember: Tool results are your ONLY source of factual information. Always verify what you say against the tool outputs."""
         
         logger.info(f"Generated system prompt: {prompt}")
         return prompt

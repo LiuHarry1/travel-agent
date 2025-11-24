@@ -13,6 +13,18 @@
         "-m",
         "app.mcp_tools.travel_doc_retriever.server"
       ]
+    },
+
+    "tavily-mcp": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "tavily-mcp@0.1.4"
+      ],
+      "env": {
+        "TAVILY_API_KEY": "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",
+        "TAVILY_MAX_RESULTS": "5"
+      }
     }
   }
 }

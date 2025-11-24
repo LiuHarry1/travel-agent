@@ -11,6 +11,7 @@ import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 # Fix for Windows: Use ProactorEventLoop for subprocess support (required by MCP SDK)
 # ProactorEventLoop is the default on Windows 3.8+ and supports subprocess
@@ -129,6 +130,24 @@ app.add_middleware(
 app.include_router(common_router)
 app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
 app.include_router(chat_router)
+
+# Mount static files directories
+logger = logging.getLogger(__name__)
+backend_dir = Path(__file__).parent.parent
+
+# Mount pic directory for images
+pic_dir = backend_dir / "pic"
+if pic_dir.exists() and pic_dir.is_dir():
+    app.mount("/static/pic", StaticFiles(directory=str(pic_dir)), name="pic")
+    logger.info(f"Mounted static files directory: {pic_dir} -> /static/pic")
+else:
+    logger.warning(f"Pic directory not found at {pic_dir}, static file serving for images disabled")
+
+# Mount static directory if it exists
+static_dir = backend_dir / "static"
+if static_dir.exists() and static_dir.is_dir():
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+    logger.info(f"Mounted static files directory: {static_dir} -> /static")
 
 
 def main():
