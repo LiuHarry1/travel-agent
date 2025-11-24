@@ -64,7 +64,18 @@ class ToolExecutionService:
         
         try:
             exec_start = time.time()
-            tool_result = await self.mcp_registry.call_tool(tool_call)
+            # Use call_tool_with_result for backward compatibility with ToolCall
+            if hasattr(self.mcp_registry, 'call_tool_with_result'):
+                tool_result = await self.mcp_registry.call_tool_with_result(tool_call)
+            else:
+                # Fallback: direct call
+                result = await self.mcp_registry.call_tool(tool_call.name, tool_call.arguments)
+                from ..mcp_tools import ToolResult
+                tool_result = ToolResult(
+                    tool_name=tool_call.name,
+                    success=True,
+                    result=result
+                )
             exec_time = time.time() - exec_start
             logger.info(f"[PERF] Tool '{tool_name}' execution (async) took {exec_time:.3f}s")
             
@@ -206,7 +217,18 @@ class ToolExecutionService:
             
             tool_call = ToolCall(name=tool_name, arguments=tool_args, id=tool_call_id)
             try:
-                tool_result = await self.mcp_registry.call_tool(tool_call)
+                # Use call_tool_with_result for backward compatibility with ToolCall
+                if hasattr(self.mcp_registry, 'call_tool_with_result'):
+                    tool_result = await self.mcp_registry.call_tool_with_result(tool_call)
+                else:
+                    # Fallback: direct call
+                    result = await self.mcp_registry.call_tool(tool_call.name, tool_call.arguments)
+                    from ..mcp_tools import ToolResult
+                    tool_result = ToolResult(
+                        tool_name=tool_call.name,
+                        success=True,
+                        result=result
+                    )
                 return {
                     "tool_call_id": tool_call_id,
                     "tool_name": tool_name,

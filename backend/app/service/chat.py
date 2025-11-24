@@ -7,7 +7,7 @@ from typing import Any, AsyncGenerator, Dict, Optional
 
 from ..config import get_config
 from ..llm import LLMClient, LLMError
-from ..mcp_tools import MCPToolRegistry
+from ..mcp_tools import MCPManager
 from ..models import ChatRequest
 from ..utils.exceptions import format_error_message
 from .message_processing import MessageProcessingService
@@ -29,11 +29,11 @@ class ChatService:
     def __init__(
         self,
         llm_client: Optional[LLMClient] = None,
-        mcp_registry: Optional[MCPToolRegistry] = None,
+        mcp_registry: Optional[MCPManager] = None,
     ):
         """Initialize chat service."""
         self.llm_client = llm_client or LLMClient()
-        self.mcp_registry = mcp_registry or MCPToolRegistry()
+        self.mcp_registry = mcp_registry or MCPManager()
         self.max_tool_iterations = 4
 
         # Initialize sub-services

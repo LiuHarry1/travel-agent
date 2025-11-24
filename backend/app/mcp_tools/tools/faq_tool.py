@@ -12,10 +12,10 @@ try:
 except ImportError:
     BM25Okapi = None
 
-from ..core.base_tool import BaseMCPTool, ToolExecutionResult
+from ..core.base_tool import BaseTool, ToolExecutionResult
 
 
-class FAQTool(BaseMCPTool):
+class FAQTool(BaseTool):
     """FAQ tool that searches a travel FAQ knowledge base."""
     
     def __init__(self, csv_path: str | None = None):

@@ -6,7 +6,7 @@ from typing import Optional
 
 from ..config import get_config
 from ..llm import LLMClient
-from ..mcp_tools import MCPToolRegistry
+from ..mcp_tools import MCPManager
 from ..service.chat import ChatService
 
 logger = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ class Container:
     def __init__(self):
         """Initialize container with lazy service creation."""
         self._llm_client: Optional[LLMClient] = None
-        self._mcp_registry: Optional[MCPToolRegistry] = None
+        self._mcp_manager: Optional[MCPManager] = None
         self._chat_service: Optional[ChatService] = None
         self._initialized = False
     
@@ -36,12 +36,17 @@ class Container:
         return self._llm_client
     
     @property
-    def mcp_registry(self) -> MCPToolRegistry:
-        """Get or create MCP tool registry instance."""
-        if self._mcp_registry is None:
-            logger.info("Creating MCP tool registry...")
-            self._mcp_registry = MCPToolRegistry()
-        return self._mcp_registry
+    def mcp_manager(self) -> MCPManager:
+        """Get or create MCP manager instance."""
+        if self._mcp_manager is None:
+            logger.info("Creating MCP manager...")
+            self._mcp_manager = MCPManager()
+        return self._mcp_manager
+    
+    @property
+    def mcp_registry(self) -> MCPManager:
+        """Alias for mcp_manager (backward compatibility)."""
+        return self.mcp_manager
     
     @property
     def chat_service(self) -> ChatService:
@@ -50,7 +55,7 @@ class Container:
             logger.info("Creating chat service...")
             self._chat_service = ChatService(
                 llm_client=self.llm_client,
-                mcp_registry=self.mcp_registry
+                mcp_registry=self.mcp_manager
             )
         return self._chat_service
     
@@ -68,11 +73,10 @@ class Container:
         
         # Initialize MCP servers
         try:
-            await self.mcp_registry.initialize_all()
+            await self.mcp_manager.load()
             logger.info(
                 f"MCP servers initialized. "
-                f"Loaded {len(self.mcp_registry.tools)} tools from "
-                f"{len(self.mcp_registry.server_manager.servers)} servers."
+                f"Loaded {len(self.mcp_manager.tool_index)} tools."
             )
         except Exception as e:
             logger.warning(f"Failed to initialize MCP servers: {e}", exc_info=True)
@@ -88,9 +92,9 @@ class Container:
         """
         logger.info("Shutting down container...")
         
-        if self._mcp_registry:
+        if self._mcp_manager:
             try:
-                await self._mcp_registry.close_all()
+                await self._mcp_manager.close()
                 logger.info("MCP connections closed")
             except Exception as e:
                 logger.error(f"Error closing MCP connections: {e}", exc_info=True)

@@ -1,0 +1,12 @@
+{
+  "servers": [
+    {
+      "id": "file-server",
+      "transport": "stdio",
+      "command": "python",
+      "args": [
+        "file_server.py"
+      ]
+    }
+  ]
+}

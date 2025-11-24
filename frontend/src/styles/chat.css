@@ -368,6 +368,20 @@
   text-decoration: underline;
 }
 
+/* Image styles - responsive to original size with reasonable limits */
+.message-bubble img {
+  max-width: 100%;
+  max-width: min(100%, 600px); /* Max 600px or container width, whichever is smaller */
+  height: auto;
+  width: auto;
+  object-fit: contain;
+  border-radius: 8px;
+  margin: 0.5rem 0;
+  display: block;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  /* Let image display at its natural size, but respect max-width */
+}
+
 /* Table styles */
 .message-bubble table {
   width: 100%;

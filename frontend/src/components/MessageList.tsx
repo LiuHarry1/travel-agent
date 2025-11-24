@@ -10,6 +10,33 @@ interface MessageListProps {
   messagesEndRef?: React.RefObject<HTMLDivElement | null>
 }
 
+/**
+ * Convert image URLs in text to Markdown image format.
+ * Detects URLs ending with image extensions and converts them to ![alt](url) format.
+ */
+function convertImageUrlsToMarkdown(content: string): string {
+  // Pattern to match image URLs (http/https URLs ending with image extensions)
+  // This regex matches URLs that are not already in Markdown image format
+  const imageUrlPattern = /(https?:\/\/[^\s]+\.(png|jpg|jpeg|gif|webp|svg|bmp))(?![)\]])/gi
+  
+  return content.replace(imageUrlPattern, (match) => {
+    // Check if this URL is already part of a Markdown image
+    // If it's already in ![alt](url) format, don't convert it
+    const beforeMatch = content.substring(0, content.indexOf(match))
+    const afterMatch = content.substring(content.indexOf(match) + match.length)
+    
+    // If there's a ! before and ( after, it's already a Markdown image
+    if (beforeMatch.endsWith('![') && afterMatch.startsWith('](')) {
+      return match
+    }
+    
+    // Convert to Markdown image format
+    // Extract filename for alt text
+    const filename = match.split('/').pop()?.split('.')[0] || '图片'
+    return `![${filename}](${match})`
+  })
+}
+
 export function MessageList({ history, loading, messagesEndRef }: MessageListProps) {
   // Track copied and feedback state for each message by index
   const [copiedStates, setCopiedStates] = useState<Record<number, boolean>>({})
@@ -68,7 +95,35 @@ export function MessageList({ history, loading, messagesEndRef }: MessageListPro
                     {/* Show content if available, or tool calls/typing indicator if no content */}
                     {turn.content ? (
                       <>
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{turn.content}</ReactMarkdown>
+                        <ReactMarkdown 
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            img: ({ node, ...props }) => (
+                              <img 
+                                {...props} 
+                                style={{ 
+                                  maxWidth: 'min(100%, 600px)', 
+                                  height: 'auto', 
+                                  width: 'auto', 
+                                  objectFit: 'contain', 
+                                  borderRadius: '8px', 
+                                  margin: '0.5rem 0', 
+                                  display: 'block' 
+                                }} 
+                              />
+                            ),
+                            p: ({ node, children, ...props }) => {
+                              // Check if paragraph contains only an image
+                              const hasOnlyImage = node.children?.length === 1 && node.children[0].type === 'image'
+                              if (hasOnlyImage) {
+                                return <p {...props} style={{ margin: 0 }}>{children}</p>
+                              }
+                              return <p {...props}>{children}</p>
+                            }
+                          }}
+                        >
+                          {convertImageUrlsToMarkdown(turn.content)}
+                        </ReactMarkdown>
                         
                         {/* Tool Calls Icons - show ALL tools (calling, completed, error) AFTER content, BEFORE actions */}
                         {/* Show all tools when message is complete (not loading), or show calling tools even while loading */}

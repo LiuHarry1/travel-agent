@@ -4,10 +4,10 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Dict
 
-from ..core.base_tool import BaseMCPTool, ToolExecutionResult
+from ..core.base_tool import BaseTool, ToolExecutionResult
 
 
-class RetrieverTool(BaseMCPTool):
+class RetrieverTool(BaseTool):
     """Retriever tool that searches a vectorized knowledge database."""
     
     # Mock knowledge database (simulating vectorized documents)

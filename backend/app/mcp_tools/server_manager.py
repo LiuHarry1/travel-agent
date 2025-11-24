@@ -106,10 +106,28 @@ class MCPServerManager:
                 
                 logger.debug(f"[ServerManager] Found '{command}' at: {command_path}")
                 
-                # On Windows, use synchronous subprocess to avoid NotImplementedError
-                # On Linux/Docker, async subprocess should work fine
-                if sys.platform == "win32":
-                    # Use synchronous subprocess on Windows
+                # Try async subprocess first, fallback to sync if needed
+                try:
+                    result = await asyncio.create_subprocess_exec(
+                        command, "--version",
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE
+                    )
+                    stdout, stderr = await asyncio.wait_for(result.communicate(), timeout=5.0)
+                    await result.wait()
+                    if result.returncode == 0:
+                        version_info = stdout.decode('utf-8', errors='ignore').strip()[:50]
+                        logger.info(f"[ServerManager] npx is available for server '{server_name}' (version: {version_info})")
+                        return True
+                    else:
+                        logger.warning(f"[ServerManager] npx version check failed for server '{server_name}' (return code: {result.returncode})")
+                        return False
+                except asyncio.TimeoutError:
+                    logger.warning(f"[ServerManager] npx version check timed out for server '{server_name}'")
+                    return False
+                except (NotImplementedError, RuntimeError):
+                    # Fallback to synchronous subprocess if async is not supported
+                    logger.debug(f"[ServerManager] Async subprocess not supported, using sync fallback for '{server_name}'")
                     try:
                         result = subprocess.run(
                             [command, "--version"],
@@ -118,7 +136,7 @@ class MCPServerManager:
                             timeout=5
                         )
                         if result.returncode == 0:
-                            logger.info(f"[ServerManager] npx is available for server '{server_name}' (version check: {result.stdout.strip()[:50]})")
+                            logger.info(f"[ServerManager] npx is available for server '{server_name}' (sync check)")
                             return True
                         else:
                             logger.warning(f"[ServerManager] npx version check failed for server '{server_name}' (return code: {result.returncode})")
@@ -126,53 +144,16 @@ class MCPServerManager:
                     except subprocess.TimeoutExpired:
                         logger.warning(f"[ServerManager] npx version check timed out for server '{server_name}'")
                         return False
-                    except Exception as e:
-                        logger.warning(f"[ServerManager] Failed to check npx version for server '{server_name}': {e}")
+                    except Exception as e2:
+                        logger.warning(f"[ServerManager] Sync fallback also failed for '{server_name}': {e2}")
                         # If command exists, assume it's available even if version check fails
                         logger.info(f"[ServerManager] Assuming '{command}' is available (found in PATH)")
                         return True
-                else:
-                    # Use async subprocess on Linux/Docker
-                    try:
-                        # Ensure we have the right event loop policy for subprocess
-                        loop = asyncio.get_event_loop()
-                        result = await asyncio.create_subprocess_exec(
-                            command, "--version",
-                            stdout=asyncio.subprocess.PIPE,
-                            stderr=asyncio.subprocess.PIPE
-                        )
-                        stdout, stderr = await asyncio.wait_for(result.communicate(), timeout=5.0)
-                        await result.wait()
-                        if result.returncode == 0:
-                            version_info = stdout.decode('utf-8', errors='ignore').strip()[:50]
-                            logger.info(f"[ServerManager] npx is available for server '{server_name}' (version: {version_info})")
-                            return True
-                        else:
-                            logger.warning(f"[ServerManager] npx version check failed for server '{server_name}' (return code: {result.returncode})")
-                            return False
-                    except asyncio.TimeoutError:
-                        logger.warning(f"[ServerManager] npx version check timed out for server '{server_name}'")
-                        return False
-                    except NotImplementedError:
-                        # Fallback to synchronous subprocess if async is not supported
-                        logger.debug(f"[ServerManager] Async subprocess not supported, using sync fallback for '{server_name}'")
-                        try:
-                            result = subprocess.run(
-                                [command, "--version"],
-                                capture_output=True,
-                                text=True,
-                                timeout=5
-                            )
-                            if result.returncode == 0:
-                                logger.info(f"[ServerManager] npx is available for server '{server_name}' (sync check)")
-                                return True
-                        except Exception as e2:
-                            logger.warning(f"[ServerManager] Sync fallback also failed for '{server_name}': {e2}")
-                    except Exception as e:
-                        logger.warning(f"[ServerManager] Failed to check npx version for server '{server_name}': {e}")
-                        # If command exists, assume it's available even if version check fails
-                        logger.info(f"[ServerManager] Assuming '{command}' is available (found in PATH)")
-                        return True
+                except Exception as e:
+                    logger.warning(f"[ServerManager] Failed to check npx version for server '{server_name}': {e}")
+                    # If command exists, assume it's available even if version check fails
+                    logger.info(f"[ServerManager] Assuming '{command}' is available (found in PATH)")
+                    return True
                 
             except Exception as e:
                 logger.error(f"[ServerManager] Failed to check npx for server '{server_name}': {e}", exc_info=True)

@@ -394,7 +394,25 @@ export function ChatPage() {
             {(summary || (suggestions && suggestions.length > 0)) && history.length > 0 && (
               <div className="chat-results">
                 <div className="result-markdown">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  <ReactMarkdown 
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      img: ({ node, ...props }) => (
+                        <img 
+                          {...props} 
+                          style={{ 
+                            maxWidth: 'min(100%, 600px)', 
+                            height: 'auto', 
+                            width: 'auto', 
+                            objectFit: 'contain', 
+                            borderRadius: '8px', 
+                            margin: '0.5rem 0', 
+                            display: 'block' 
+                          }} 
+                        />
+                      )
+                    }}
+                  >
                     {`${summary ? `## Review Summary\n\n${summary}\n\n` : ''}${
                       suggestions && suggestions.length > 0
                         ? `## Improvement Suggestions (${suggestions.length})\n\n${suggestions

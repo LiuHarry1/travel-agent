@@ -247,16 +247,13 @@ class OpenAIClient(BaseLLMClient):
         except Exception as exc:
             logger.error(f"OpenAI streaming error: {str(exc)}", exc_info=True)
             error_msg = str(exc)
-            # Check for Windows socket error 10054
-            if "10054" in error_msg or "远程主机强迫关闭" in error_msg or "Connection reset" in error_msg:
-                raise LLMError(
-                    "连接被远程主机关闭：可能是网络不稳定、服务器限流或代理服务器问题。"
-                    "请检查网络连接，稍后重试，或检查代理服务器配置。"
-                ) from exc
-            if "nodename" in error_msg or "not known" in error_msg or "getaddrinfo" in error_msg:
-                raise LLMError(
-                    "网络连接错误：无法解析服务器地址。请检查网络连接和DNS设置。"
-                ) from exc
+            # Use platform-specific error handling
+            from ..platform_config import is_windows_socket_error, format_network_error
+            if is_windows_socket_error(error_msg):
+                raise LLMError(format_network_error(error_msg, is_socket_error=True)) from exc
+            formatted_error = format_network_error(error_msg)
+            if formatted_error != f"网络错误：{error_msg}":
+                raise LLMError(formatted_error) from exc
             raise LLMError(f"流式请求错误：{error_msg}") from exc
 
     def _extract_stream_chunk(self, chunk_data: Dict[str, Any]) -> Optional[str]:

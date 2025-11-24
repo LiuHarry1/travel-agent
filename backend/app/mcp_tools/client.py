@@ -166,14 +166,8 @@ class MCPClient:
                             )
                 
                 # Import at runtime to ensure MCP SDK is available
-                import sys
                 import os
                 from pathlib import Path
-                
-                # Ensure Windows uses ProactorEventLoop for subprocess support
-                if sys.platform == "win32":
-                    if hasattr(asyncio, "WindowsProactorEventLoopPolicy"):
-                        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
                 
                 # Log server parameters for debugging
                 logger.info(f"[MCPClient] Establishing persistent connection with command: {self.command}, args: {self.args}")
@@ -221,6 +215,32 @@ class MCPClient:
                 
                 logger.info(f"[MCPClient] Persistent connection established successfully")
                 
+            except NotImplementedError as e:
+                # This error occurs when the event loop doesn't support subprocess operations
+                # This can happen on Windows if not using ProactorEventLoop
+                error_msg = str(e)
+                logger.error(f"[MCPClient] Failed to establish persistent connection: {error_msg}")
+                logger.error(f"[MCPClient] Command: {self.command}, Args: {self.args}")
+                logger.error(f"[MCPClient] Working directory: {self.cwd}")
+                
+                # Provide helpful error message about event loop requirements
+                try:
+                    from ..platform_config import get_event_loop_info
+                    loop_info = get_event_loop_info()
+                    logger.error(f"[MCPClient] Event loop info: {loop_info}")
+                    logger.error(f"[MCPClient] The event loop does not support subprocess operations.")
+                    logger.error(f"[MCPClient] For stdio servers, you need an event loop that supports subprocess.")
+                    logger.error(f"[MCPClient] Consider using local tools (type: 'local') instead of stdio servers for better compatibility.")
+                except Exception:
+                    # If we can't get loop info, just log the basic error
+                    logger.error(f"[MCPClient] The event loop does not support subprocess operations.")
+                    logger.error(f"[MCPClient] Consider using local tools (type: 'local') instead of stdio servers.")
+                
+                await self._cleanup_connection()
+                raise RuntimeError(
+                    f"Failed to establish MCP connection: Event loop does not support subprocess operations. "
+                    f"Consider using local tools (type: 'local') instead of stdio servers."
+                ) from e
             except Exception as e:
                 error_msg = str(e)
                 logger.error(f"[MCPClient] Failed to establish persistent connection: {error_msg}")

@@ -1,0 +1,38 @@
+{
+  "servers": [
+    {
+      "id": "math-server",
+      "transport": "ws",
+      "endpoint": "ws://localhost:5173"
+    },
+    {
+      "id": "file-server",
+      "transport": "stdio",
+      "command": "python",
+      "args": ["file_server.py"]
+    },
+    {
+      "id": "tavily-mcp",
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "tavily-mcp@0.1.4"
+      ],
+      "env": {
+        "TAVILY_API_KEY": "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",
+        "TAVILY_MAX_RESULTS": "5"
+      }
+    },
+    {
+      "id": "calculator",
+      "type": "local",
+      "module": "tools.calculator_tool"
+    },
+    {
+      "id": "echo",
+      "type": "local",
+      "module": "tools.echo_tool"
+    }
+  ]
+}

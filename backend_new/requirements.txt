@@ -1,0 +1,3 @@
+# 基础依赖
+mcp>=1.0.0  # MCP SDK for external servers
+

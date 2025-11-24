@@ -53,13 +53,18 @@ class MessageProcessingService:
         # All tool-specific usage information is in the tool descriptions themselves
         tool_descriptions = []
         for tool in tools:
-            # Get detailed description from tool schema
-            tool_name = tool.name
-            tool_desc = tool.description or ""
+            # Handle both dict (from MCPManager) and object (from old registry) formats
+            if isinstance(tool, dict):
+                tool_name = tool.get("name", "")
+                tool_desc = tool.get("description", "")
+                input_schema = tool.get("inputSchema", {})
+            else:
+                tool_name = getattr(tool, 'name', '')
+                tool_desc = getattr(tool, 'description', '') or ""
+                input_schema = getattr(tool, 'inputSchema', None) or getattr(tool, 'extra', {}).get('inputSchema', {})
             
             # Get parameter descriptions from input schema for additional context
             # Parameter descriptions often contain important usage hints
-            input_schema = getattr(tool, 'inputSchema', None) or getattr(tool, 'extra', {}).get('inputSchema', {})
             param_descriptions = []
             
             if isinstance(input_schema, dict):

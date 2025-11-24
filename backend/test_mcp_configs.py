@@ -234,10 +234,16 @@ async def main():
 
 
 if __name__ == "__main__":
-    # Fix for Windows
-    if sys.platform == "win32":
-        if hasattr(asyncio, "WindowsProactorEventLoopPolicy"):
-            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+    # Use platform-specific configuration
+    import sys
+    from pathlib import Path
+    # Add backend to path for imports
+    backend_dir = Path(__file__).parent
+    if str(backend_dir) not in sys.path:
+        sys.path.insert(0, str(backend_dir))
+    
+    from app.platform_config import initialize_platform
+    initialize_platform()
     
     asyncio.run(main())
 

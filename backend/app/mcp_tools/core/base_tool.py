@@ -30,8 +30,8 @@ class ToolExecutionResult:
         return result
 
 
-class BaseMCPTool(ABC):
-    """Base class for all MCP tools."""
+class BaseTool(ABC):
+    """Base class for all tools (simplified, cross-platform compatible)."""
     
     def __init__(self, name: str, description: str):
         """
@@ -120,4 +120,8 @@ class BaseMCPTool(ABC):
                 data=None,
                 error=str(e)
             )
+
+
+# Alias for backward compatibility
+BaseMCPTool = BaseTool
 

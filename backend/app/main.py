@@ -1,40 +1,27 @@
 from __future__ import annotations
 
-import asyncio
+import sys
 import logging
 import os
-import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+# Ensure backend directory is in sys.path for imports
+# This must be done before importing app modules
+_backend_dir = Path(__file__).parent.parent
+if str(_backend_dir) not in sys.path:
+    sys.path.insert(0, str(_backend_dir))
+
+# Initialize platform-specific configuration early
+# This must be done before any other imports that might use asyncio
+from app.platform_config import initialize_platform
+initialize_platform()
 
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-
-# Fix for Windows: Use ProactorEventLoop for subprocess support (required by MCP SDK)
-# ProactorEventLoop is the default on Windows 3.8+ and supports subprocess
-# This must be set before any event loop is created
-if sys.platform == "win32":
-    # Windows ProactorEventLoop supports subprocess operations
-    # Set the policy before any event loop is created
-    if hasattr(asyncio, "WindowsProactorEventLoopPolicy"):
-        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-    
-    # Suppress asyncio resource warnings on Windows
-    # These warnings occur when subprocess transports are cleaned up after event loop closes
-    # They are harmless and don't affect functionality
-    import warnings
-    warnings.filterwarnings("ignore", category=ResourceWarning, message=".*unclosed.*")
-    warnings.filterwarnings("ignore", message=".*Event loop is closed.*")
-    warnings.filterwarnings("ignore", message=".*I/O operation on closed pipe.*")
-    warnings.filterwarnings("ignore", message=".*Exception ignored.*")
-
-# Ensure backend directory is in sys.path for imports
-_backend_dir = Path(__file__).parent.parent
-if str(_backend_dir) not in sys.path:
-    sys.path.insert(0, str(_backend_dir))
 
 # Use absolute imports for consistency
 from app.api import (
@@ -72,28 +59,20 @@ async def lifespan(app: FastAPI):
     """
     logger = logging.getLogger(__name__)
     
+    # Verify event loop policy is set correctly (in case uvicorn created a new process)
+    from app.platform_config import setup_event_loop_policy, check_event_loop_for_uvicorn
+    
+    # Re-set policy in case uvicorn created a new process
+    setup_event_loop_policy()
+    
+    # Check the actual running event loop and log platform-specific warnings
+    check_event_loop_for_uvicorn()
+    
     # Startup
-    # On Windows, check if we can use subprocess with current event loop
-    if sys.platform == "win32":
-        try:
-            loop = asyncio.get_running_loop()
-            if not isinstance(loop, asyncio.ProactorEventLoop):
-                logger.info("Current event loop is not ProactorEventLoop. Skipping pre-warm (will initialize on first use).")
-            else:
-                try:
-                    await container.initialize()
-                except NotImplementedError as e:
-                    logger.info(f"Skipping pre-warm due to Windows subprocess limitation: {e}. Services will initialize on first use.")
-                except Exception as e:
-                    logger.warning(f"Failed to initialize services: {e}. They will be initialized on first use.", exc_info=True)
-        except RuntimeError:
-            logger.info("No running event loop. Skipping pre-warm (will initialize on first use).")
-    else:
-        # Non-Windows platforms
-        try:
-            await container.initialize()
-        except Exception as e:
-            logger.warning(f"Failed to initialize services: {e}. They will be initialized on first use.", exc_info=True)
+    try:
+        await container.initialize()
+    except Exception as e:
+        logger.warning(f"Failed to initialize services: {e}. They will be initialized on first use.", exc_info=True)
     
     yield
     
@@ -135,38 +114,73 @@ app.include_router(chat_router)
 logger = logging.getLogger(__name__)
 backend_dir = Path(__file__).parent.parent
 
-# Mount pic directory for images
-pic_dir = backend_dir / "pic"
-if pic_dir.exists() and pic_dir.is_dir():
-    app.mount("/static/pic", StaticFiles(directory=str(pic_dir)), name="pic")
-    logger.info(f"Mounted static files directory: {pic_dir} -> /static/pic")
-else:
-    logger.warning(f"Pic directory not found at {pic_dir}, static file serving for images disabled")
-
 # Mount static directory if it exists
 static_dir = backend_dir / "static"
 if static_dir.exists() and static_dir.is_dir():
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
     logger.info(f"Mounted static files directory: {static_dir} -> /static")
+    
+    # Also mount pic subdirectory for easier access
+    pic_dir = static_dir / "pic"
+    if pic_dir.exists() and pic_dir.is_dir():
+        app.mount("/static/pic", StaticFiles(directory=str(pic_dir)), name="pic")
+        logger.info(f"Mounted pic directory: {pic_dir} -> /static/pic")
+
+
+async def run_server():
+    """Async function to run uvicorn server with proper event loop."""
+    import asyncio
+    from uvicorn import Config, Server
+    
+    # Event loop policy is already set by initialize_platform() at module import
+    # and by setup_event_loop_policy() in main() function
+    # No need to set it again here
+    
+    # Verify the event loop is correct
+    loop = asyncio.get_running_loop()
+    loop_type = type(loop).__name__
+    logger = logging.getLogger(__name__)
+    logger.info(f"Running server with event loop: {loop_type}")
+    
+    # Use DEBUG level if LOG_LEVEL env var is set to DEBUG
+    uvicorn_log_level = "debug" if os.getenv("LOG_LEVEL", "INFO").upper() == "DEBUG" else "info"
+    
+    # Create uvicorn config and server
+    config = Config(
+        app="app.main:app",
+        host="0.0.0.0",
+        port=8000,
+        log_level=uvicorn_log_level,
+        reload=False,  # Disable reload to ensure proper event loop
+    )
+    server = Server(config)
+    
+    # Run the server
+    await server.serve()
 
 
 def main():
     """启动 FastAPI 应用"""
-    # Fix for Windows: Ensure ProactorEventLoop is set before uvicorn starts
-    if sys.platform == "win32":
-        if hasattr(asyncio, "WindowsProactorEventLoopPolicy"):
-            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+    # Event loop policy is already set by initialize_platform() at module import
+    # But we verify it here to ensure it's correct (especially if uvicorn creates new process)
+    from app.platform_config import setup_event_loop_policy, verify_event_loop_policy
+    import asyncio
     
-    # 使用导入字符串以支持 reload 功能
-    # Use DEBUG level if LOG_LEVEL env var is set to DEBUG
-    uvicorn_log_level = "debug" if os.getenv("LOG_LEVEL", "INFO").upper() == "DEBUG" else "info"
-    uvicorn.run(
-        "app.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        log_level=uvicorn_log_level
-    )
+    # Re-set policy in case uvicorn or other code created a new process/thread
+    # This is especially important on Windows where ProactorEventLoop is required
+    setup_event_loop_policy()
+    
+    # Verify the policy is set correctly
+    verification_result = verify_event_loop_policy()
+    # Warnings are already logged by verify_event_loop_policy
+    
+    # Use asyncio.run() to ensure proper event loop is used
+    # This is similar to how backend_new test scripts work
+    try:
+        asyncio.run(run_server())
+    except KeyboardInterrupt:
+        logger = logging.getLogger(__name__)
+        logger.info("Server stopped by user")
 
 
 if __name__ == "__main__":
