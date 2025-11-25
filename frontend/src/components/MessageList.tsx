@@ -114,9 +114,13 @@ export function MessageList({ history, loading, messagesEndRef }: MessageListPro
                             ),
                             p: ({ node, children, ...props }) => {
                               // Check if paragraph contains only an image
-                              const hasOnlyImage = node.children?.length === 1 && node.children[0].type === 'image'
-                              if (hasOnlyImage) {
-                                return <p {...props} style={{ margin: 0 }}>{children}</p>
+                              // In ReactMarkdown, images are rendered as img elements in children
+                              if (node && node.children && node.children.length === 1) {
+                                const firstChild = node.children[0] as any
+                                // Check if it's an image element by checking tagName property
+                                if (firstChild && firstChild.tagName === 'img') {
+                                  return <p {...props} style={{ margin: 0 }}>{children}</p>
+                                }
                               }
                               return <p {...props}>{children}</p>
                             }

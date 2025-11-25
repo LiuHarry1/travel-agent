@@ -185,7 +185,7 @@ export function AdminPage() {
     if (!systemPrompt.trim()) {
       setAlert({
         type: 'error',
-        message: 'System prompt cannot be empty',
+        message: 'System prompt template cannot be empty',
       })
       return
     }
@@ -197,12 +197,12 @@ export function AdminPage() {
       })
       setAlert({
         type: 'success',
-        message: 'System prompt updated successfully! The new prompt will be used for future conversations.',
+        message: 'System prompt template updated successfully! The new template will be used for future conversations.',
       })
     } catch (error) {
       setAlert({
         type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to save system prompt',
+        message: error instanceof Error ? error.message : 'Failed to save system prompt template',
       })
     } finally {
       setSavingPrompt(false)
@@ -467,7 +467,7 @@ export function AdminPage() {
               <div className="form-group">
                 <label htmlFor="system-prompt">System Prompt Template</label>
                 {loadingPrompt ? (
-                  <div className="form-loading">Loading system prompt...</div>
+                  <div className="form-loading">Loading system prompt template...</div>
                 ) : (
                   <textarea
                     id="system-prompt"
@@ -475,12 +475,13 @@ export function AdminPage() {
                     onChange={(e) => setSystemPrompt(e.target.value)}
                     disabled={savingPrompt}
                     className="form-textarea"
-                    rows={12}
-                    placeholder="Enter system prompt template..."
+                    rows={15}
+                    placeholder="You are a helpful travel agent assistant. Your goal is to help users with travel-related questions and planning.&#10;&#10;Available Tools:&#10;{tools}&#10;&#10;Instructions:&#10;- Use tools when you need specific information to answer questions&#10;- Base your answers STRICTLY on tool results&#10;- Do not add information not in tool results"
                   />
                 )}
                 <small className="form-hint">
-                  This prompt will be used as the base system message for the travel agent. Available tools will be automatically appended.
+                  Enter the system prompt template. Use <code>{'{tools}'}</code> placeholder to insert the available tools list. 
+                  If <code>{'{tools}'}</code> is not present, tools will be automatically appended at the end.
                 </small>
               </div>
 
@@ -491,22 +492,27 @@ export function AdminPage() {
                   disabled={savingPrompt || loadingPrompt || !systemPrompt.trim()}
                   className="btn btn-primary"
                 >
-                  {savingPrompt ? 'Saving...' : 'Save System Prompt'}
+                  {savingPrompt ? 'Saving...' : 'Save System Prompt Template'}
                 </button>
               </div>
             </div>
 
             <div className="admin-info" style={{ gridColumn: '1 / -1' }}>
-              <h3>Current System Prompt</h3>
+              <h3>Template Info</h3>
               <div className="info-card">
                 <div className="info-row">
                   <span className="info-label">Length:</span>
                   <span className="info-value">{systemPrompt.length} characters</span>
                 </div>
+                <div className="info-row">
+                  <span className="info-label">Contains {'{tools}'} placeholder:</span>
+                  <span className="info-value">{systemPrompt.includes('{tools}') ? 'Yes' : 'No (tools will be appended)'}</span>
+                </div>
               </div>
               <div className="info-note">
                 <p>
-                  <strong>Note:</strong> The system prompt will be used for all new conversations. Changes take effect immediately.
+                  <strong>Note:</strong> The <code>{'{tools}'}</code> placeholder will be replaced with the list of available tools when the system prompt is generated. 
+                  If you don't include the placeholder, tools will be automatically added at the end. Changes take effect immediately for new conversations.
                 </p>
               </div>
             </div>

@@ -1,3 +1,10 @@
 # 基础依赖
 mcp>=1.0.0  # MCP SDK for external servers
 
+# OpenAI SDK (支持 Qwen 和 OpenAI)
+openai>=1.0.0
+
+# FastAPI 和 Web 服务器（可选，用于 server.py）
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+
