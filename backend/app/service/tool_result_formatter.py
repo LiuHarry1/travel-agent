@@ -28,33 +28,76 @@ def format_tool_result_for_llm(tool_result: Any, tool_name: str) -> str:
             logger.debug(f"Tool {tool_name} returned dict with 'text' key (length: {len(tool_result['text'])})")
             return tool_result["text"]
         
-        # Handle tools that return answer field (like FAQ tool)
-        # Check based on data structure, not tool name (tool-agnostic)
+        # Handle tools that return answers field (multiple results, like FAQ tool)
+        if "answers" in tool_result:
+            answers = tool_result.get("answers", [])
+            count = tool_result.get("count", len(answers))
+            
+            if not answers or count == 0:
+                # Tool didn't find any answers - format clearly for LLM
+                message = tool_result.get("message", "No matching answers found in FAQ database.")
+                formatted = f"Tool result: {message}\nSuggestion: You can try using other tools to search for related information."
+                logger.info(f"Tool {tool_name} did not find answers, formatted for LLM: {formatted[:100]}")
+                return formatted
+            else:
+                # Tool found multiple answers - format them clearly
+                answers_text = ""
+                for i, result in enumerate(answers, 1):
+                    question = result.get("matched_question", "")
+                    answer = result.get("answer", "")
+                    score = result.get("score", 0.0)
+                    answers_text += f"\n--- Result {i} (Score: {score:.2f}) ---\n"
+                    if question:
+                        answers_text += f"Question: {question}\n"
+                    answers_text += f"Answer: {answer}\n"
+                
+                formatted = f"""Tool returned results (you must strictly base your answer on these results, do not add other information):
+
+{answers_text}
+
+[Important Instructions] These are the complete answers provided by the tool. You must:
+1. Strictly base your answer on the above tool results
+2. Do not add information not present in the tool results
+3. Do not fabricate or guess any details
+4. If the tool results already fully answer the question, use these results directly
+5. If you need to reorganize the content, keep all facts and details completely consistent with the tool results
+6. If multiple results are provided, you can synthesize information from all of them, but do not add information not present in any of them
+
+Please generate your answer based on the above tool results."""
+                logger.info(f"Tool {tool_name} found {count} answer(s), formatted for LLM")
+                return formatted
+        
+        # Handle tools that return single answer field (backward compatibility)
         if "answer" in tool_result or "found" in tool_result:
             found = tool_result.get("found", tool_result.get("answer") is not None)
             answer = tool_result.get("answer")
             
             if not found or answer is None:
                 # Tool didn't find an answer - format clearly for LLM
-                message = tool_result.get("message", "未找到匹配的答案。")
-                formatted = f"工具结果: {message}\n建议: 可以尝试使用其他工具搜索相关信息。"
+                message = tool_result.get("message", "No matching answer found.")
+                formatted = f"Tool result: {message}\nSuggestion: You can try using other tools to search for related information."
                 logger.info(f"Tool {tool_name} did not find answer, formatted for LLM: {formatted[:100]}")
                 return formatted
             else:
                 # Tool found an answer - format clearly to indicate this is the complete answer
-                # Add strong instructions to use ONLY this information
-                formatted = f"""工具返回的结果（必须严格基于此结果回答，不要添加其他信息）：
+                matched_question = tool_result.get("matched_question", "")
+                answers_text = ""
+                if matched_question:
+                    answers_text += f"Question: {matched_question}\n"
+                answers_text += f"Answer: {answer}\n"
+                
+                formatted = f"""Tool returned result (you must strictly base your answer on this result, do not add other information):
 
-{answer}
+{answers_text}
 
-【重要提示】这是工具提供的完整答案。你必须：
-1. 严格基于上述工具结果来回答用户问题
-2. 不要添加工具结果中没有的信息
-3. 不要编造或猜测任何细节
-4. 如果工具结果已经完整回答了问题，直接使用这个结果回答用户
-5. 如果需要对内容进行重新组织，保持所有事实和细节与工具结果完全一致
+[Important Instructions] This is the complete answer provided by the tool. You must:
+1. Strictly base your answer on the above tool result
+2. Do not add information not present in the tool result
+3. Do not fabricate or guess any details
+4. If the tool result already fully answers the question, use this result directly
+5. If you need to reorganize the content, keep all facts and details completely consistent with the tool result
 
-请基于上述工具结果生成回答。"""
+Please generate your answer based on the above tool result."""
                 logger.info(f"Tool {tool_name} found answer, formatted for LLM (length: {len(answer)})")
                 return formatted
         

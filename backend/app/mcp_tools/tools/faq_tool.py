@@ -201,8 +201,8 @@ class FAQTool(BaseTool):
         
         # Use BM25 for search if available, otherwise fall back to simple matching
         if self.bm25 is not None:
-            # Search with BM25 - get top 3 results for reranking
-            results = self._search_with_bm25(query, top_k=3)
+            # Search with BM25 - get top 5 results for reranking
+            results = self._search_with_bm25(query, top_k=5)
             
             if results:
                 query_lower = query.lower()
@@ -237,35 +237,39 @@ class FAQTool(BaseTool):
                 # Sort by adjusted score
                 reranked_results.sort(key=lambda x: x[1], reverse=True)
                 
-                # Get best match
-                if reranked_results:
-                    idx, adjusted_score, bm25_score, matched_question, answer = reranked_results[0]
-                    
-                    # BM25 scores are typically positive but not normalized to 0-1
-                    threshold = 1.0  # Minimum BM25 score to consider a match
-                    
+                # BM25 scores are typically positive but not normalized to 0-1
+                threshold = 1.0  # Minimum BM25 score to consider a match
+                
+                # Filter results by threshold and get top matches
+                valid_results = []
+                for idx, adjusted_score, bm25_score, matched_question, answer in reranked_results:
                     if bm25_score >= threshold:
-                        # Normalize score to 0-1 range for consistency
                         normalized_score = min(1.0, bm25_score / 20.0)  # Adjusted normalization
-                        
-                        self.logger.info(f"BM25 matched query '{query}' to question '{matched_question}' with BM25 score {bm25_score:.2f} (normalized: {normalized_score:.2f})")
-                        return ToolExecutionResult(
-                            success=True,
-                            data={
-                                "answer": answer,
-                                "matched_question": matched_question,
-                                "score": normalized_score,
-                                "bm25_score": bm25_score,
-                                "source": "travel_faq_database"
-                            },
-                            metadata={"matched_question": matched_question, "score": normalized_score, "bm25_score": bm25_score}
-                        )
+                        valid_results.append({
+                            "answer": answer,
+                            "matched_question": matched_question,
+                            "score": normalized_score,
+                            "bm25_score": bm25_score
+                        })
+                
+                if valid_results:
+                    # Return top 3 results (or all if less than 3)
+                    top_results = valid_results[:3]
+                    self.logger.info(f"BM25 matched query '{query}' to {len(top_results)} question(s)")
+                    return ToolExecutionResult(
+                        success=True,
+                        data={
+                            "answers": top_results,
+                            "count": len(top_results),
+                            "source": "travel_faq_database"
+                        },
+                        metadata={"count": len(top_results)}
+                    )
         
         # Fallback: simple keyword matching if BM25 not available or no match found
         # This is a simplified version for fallback
         query_lower = query.lower()
-        best_match: Tuple[str, str] | None = None
-        best_score = 0.0
+        matches: List[Tuple[str, str, float]] = []
         
         # Simple keyword-based matching as fallback
         query_chars = set(c for c in query_lower if '\u4e00' <= c <= '\u9fff')
@@ -285,33 +289,44 @@ class FAQTool(BaseTool):
             if query_lower in question_lower or question_lower in query_lower:
                 score = max(score, 0.8)
             
-            if score > best_score:
-                best_score = score
-                best_match = (question, answer)
+            if score >= 0.3:  # Threshold for valid matches
+                matches.append((question, answer, score))
+        
+        # Sort by score descending
+        matches.sort(key=lambda x: x[2], reverse=True)
         
         threshold = 0.3
-        if best_match and best_score >= threshold:
-            matched_question, answer = best_match
-            self.logger.info(f"Fallback matched query '{query}' to question '{matched_question}' with score {best_score:.2f}")
+        if matches:
+            # Return top 3 results (or all if less than 3)
+            top_matches = matches[:3]
+            results = [
+                {
+                    "answer": answer,
+                    "matched_question": question,
+                    "score": score
+                }
+                for question, answer, score in top_matches
+            ]
+            self.logger.info(f"Fallback matched query '{query}' to {len(results)} question(s)")
             return ToolExecutionResult(
                 success=True,
                 data={
-                    "answer": answer,
-                    "matched_question": matched_question,
-                    "score": best_score,
+                    "answers": results,
+                    "count": len(results),
                     "source": "travel_faq_database"
                 },
-                metadata={"matched_question": matched_question, "score": best_score}
+                metadata={"count": len(results)}
             )
         else:
             # No match found
-            self.logger.info(f"No match for query '{query}' (best score: {best_score:.2f})")
+            self.logger.info(f"No match for query '{query}'")
             return ToolExecutionResult(
                 success=True,
                 data={
-                    "answer": None,
+                    "answers": [],
+                    "count": 0,
                     "found": False,
-                    "message": "FAQ知识库中没有找到匹配的答案。",
+                    "message": "No matching answers found in FAQ database.",
                     "source": "travel_faq_database"
                 }
             )
