@@ -63,14 +63,6 @@ class BaseLLMClient(ABC):
                         http2=True  # Enable HTTP/2 for better performance
                     )
         return self._async_client
-    
-    async def close(self):
-        """Close async HTTP client and release resources."""
-        if self._async_client is not None:
-            with self._client_lock:
-                if self._async_client is not None:
-                    await self._async_client.aclose()
-                    self._async_client = None
 
     @abstractmethod
     def _get_api_key(self) -> Optional[str]:
@@ -88,11 +80,6 @@ class BaseLLMClient(ABC):
         pass
 
     @abstractmethod
-    async def _make_request(self, endpoint: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Make async HTTP request to LLM API."""
-        pass
-
-    @abstractmethod
     async def _make_stream_request(self, endpoint: str, payload: Dict[str, Any]) -> AsyncGenerator[str, None]:
         """Make async streaming HTTP request to LLM API. Returns async generator of chunks."""
         pass
@@ -100,11 +87,6 @@ class BaseLLMClient(ABC):
     @abstractmethod
     def _normalize_payload(self, messages: List[Dict[str, str]], model: Optional[str] = None) -> Dict[str, Any]:
         """Normalize payload format for the specific provider."""
-        pass
-
-    @abstractmethod
-    def _extract_response(self, data: Dict[str, Any]) -> str:
-        """Extract response text from provider-specific response format."""
         pass
 
     @abstractmethod

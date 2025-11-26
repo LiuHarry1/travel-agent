@@ -151,11 +151,11 @@ class LLMClient:
     def _heuristic_chat(self, messages: List[Dict[str, str]]) -> str:
         """Fallback response when API key is not available."""
         if not messages:
-            return "您好，我可以帮助您。请告诉我您需要什么帮助。"
+            return "Hello, I can help you. Please tell me what you need."
 
         last_message = messages[-1].get("content", "")
         if not last_message:
-            return "请提供您的消息内容。"
+            return "Please provide your message content."
 
-        return f"收到您的消息：{last_message[:100]}。这是一个测试回复，请配置 API key 以使用真实 LLM。"
+        return f"Received your message: {last_message[:100]}. This is a test response, please configure API key to use real LLM."
 

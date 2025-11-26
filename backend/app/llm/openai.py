@@ -86,84 +86,6 @@ class OpenAIClient(BaseLLMClient):
         
         return payload
 
-    def _extract_response(self, data: Dict[str, Any]) -> str:
-        """Extract response from OpenAI format."""
-        return data.get("choices", [{}])[0].get("message", {}).get("content", "未能获取模型回复。")
-
-    async def _make_request(self, endpoint: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Make async HTTP request to OpenAI API with connection pooling."""
-        base_url = self._get_base_url()
-        model = payload.get("model", self._get_model_name())
-        url = f"{base_url}/chat/completions"
-        
-        headers = {
-            "Content-Type": "application/json"
-        }
-        # Add Authorization header only if API key is available
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-
-        # Convert functions to tools format for OpenAI API
-        payload = self._convert_functions_to_tools(payload.copy())
-        
-        messages_count = len(payload.get("messages", []))
-        logger.info(f"OpenAI API request (async) - URL: {url}, Model: {model}, Messages: {messages_count}")
-        if "tools" in payload:
-            logger.debug(f"Using {len(payload['tools'])} tools (converted from functions)")
-
-        request_start = time.time()
-        try:
-            client = self._get_async_client()
-            response = await client.post(url, json=payload, headers=headers)
-            request_time = time.time() - request_start
-
-            logger.debug(f"OpenAI API response - Status: {response.status_code}, Time: {request_time:.2f}s")
-            response.raise_for_status()
-
-            result = response.json()
-            logger.debug(f"OpenAI response parsed successfully")
-            return result
-
-        except httpx.TimeoutException as exc:
-            request_time = time.time() - request_start
-            logger.error(f"OpenAI API timeout after {request_time:.2f}s")
-            raise LLMError(f"请求超时：API响应时间超过 {self._config.llm_timeout} 秒。") from exc
-        except httpx.HTTPStatusError as exc:
-            request_time = time.time() - request_start
-            logger.error(f"OpenAI API HTTP error {exc.response.status_code}")
-            error_text = exc.response.text[:200] if exc.response.text else ""
-            if exc.response.status_code == 401:
-                raise LLMError(
-                    "API密钥无效或已过期。请检查 OPENAI_API_KEY 环境变量或配置中的API密钥。"
-                ) from exc
-            elif exc.response.status_code == 404:
-                raise LLMError(
-                    f"模型 '{model}' 不存在或无法访问。请检查模型名称是否正确。"
-                ) from exc
-            elif exc.response.status_code == 429:
-                raise LLMError(
-                    "请求速率限制：API请求过于频繁。请稍后重试。"
-                ) from exc
-            raise LLMError(f"HTTP错误 {exc.response.status_code}：{error_text}") from exc
-        except httpx.ConnectError as exc:
-            request_time = time.time() - request_start
-            logger.error(f"OpenAI API connection error: {str(exc)}")
-            error_msg = str(exc)
-            if "10054" in error_msg or "远程主机强迫关闭" in error_msg or "Connection reset" in error_msg:
-                raise LLMError(
-                    "连接被远程主机关闭：可能是网络不稳定、服务器限流或代理服务器问题。"
-                    "请检查网络连接，稍后重试，或检查代理服务器配置。"
-                ) from exc
-            if "nodename" in error_msg or "not known" in error_msg:
-                raise LLMError(
-                    "网络连接错误：无法解析服务器地址。请检查网络连接和DNS设置。"
-                ) from exc
-            raise LLMError(f"连接错误：无法连接到OpenAI服务。请检查网络连接和端点配置。") from exc
-        except Exception as exc:
-            request_time = time.time() - request_start
-            logger.error(f"OpenAI API error after {request_time:.2f}s: {str(exc)}")
-            raise LLMError(f"API错误：{str(exc)}") from exc
-
     async def _make_stream_request(self, endpoint: str, payload: Dict[str, Any]) -> AsyncGenerator[str, None]:
         """Make async streaming HTTP request to OpenAI API with connection pooling."""
         base_url = self._get_base_url()
@@ -188,16 +110,6 @@ class OpenAIClient(BaseLLMClient):
         try:
             client = self._get_async_client()
             async with client.stream("POST", url, json=request_payload, headers=headers) as response:
-                # Check status before processing stream
-                if response.status_code != 200:
-                    # Read error response
-                    error_text = ""
-                    try:
-                        error_text = (await response.aread()).decode('utf-8', errors='ignore')[:500]
-                    except:
-                        pass
-                    logger.error(f"OpenAI streaming error response (status {response.status_code}): {error_text}")
-                    response.raise_for_status()
                 response.raise_for_status()
                 async for line in response.aiter_lines():
                     if line:
@@ -218,47 +130,14 @@ class OpenAIClient(BaseLLMClient):
                                 continue
         except httpx.TimeoutException as exc:
             logger.error(f"OpenAI streaming timeout: {str(exc)}")
-            raise LLMError(f"请求超时：流式响应时间超过限制。请检查网络连接或稍后重试。") from exc
-        except httpx.ConnectError as exc:
-            logger.error(f"OpenAI streaming connection error: {str(exc)}")
-            error_msg = str(exc)
-            if "10054" in error_msg or "远程主机强迫关闭" in error_msg or "Connection reset" in error_msg:
-                raise LLMError(
-                    "连接被远程主机关闭：可能是网络不稳定、服务器限流或代理服务器问题。"
-                    "请检查网络连接，稍后重试，或检查代理服务器配置。"
-                ) from exc
-            if "nodename" in error_msg or "not known" in error_msg:
-                raise LLMError(
-                    "网络连接错误：无法解析服务器地址。请检查网络连接和DNS设置。"
-                ) from exc
-            raise LLMError(f"连接错误：无法连接到OpenAI服务。请检查网络连接和端点配置。") from exc
+            raise LLMError("Request timeout, please check network connection or try again later") from exc
         except httpx.HTTPStatusError as exc:
             logger.error(f"OpenAI streaming HTTP error {exc.response.status_code}: {str(exc)}")
             error_text = exc.response.text[:200] if exc.response.text else ""
-            if exc.response.status_code == 401:
-                raise LLMError(
-                    "API密钥无效或已过期。请检查 OPENAI_API_KEY 环境变量或配置中的API密钥。"
-                ) from exc
-            elif exc.response.status_code == 404:
-                raise LLMError(
-                    f"模型 '{model}' 不存在或无法访问。请检查模型名称是否正确。"
-                ) from exc
-            elif exc.response.status_code == 429:
-                raise LLMError(
-                    "请求速率限制：API请求过于频繁。请稍后重试。"
-                ) from exc
-            raise LLMError(f"HTTP错误 {exc.response.status_code}：{error_text}") from exc
+            raise LLMError(f"API request failed ({exc.response.status_code}): {error_text}") from exc
         except Exception as exc:
             logger.error(f"OpenAI streaming error: {str(exc)}", exc_info=True)
-            error_msg = str(exc)
-            # Use platform-specific error handling
-            from ..platform_config import is_windows_socket_error, format_network_error
-            if is_windows_socket_error(error_msg):
-                raise LLMError(format_network_error(error_msg, is_socket_error=True)) from exc
-            formatted_error = format_network_error(error_msg)
-            if formatted_error != f"网络错误：{error_msg}":
-                raise LLMError(formatted_error) from exc
-            raise LLMError(f"流式请求错误：{error_msg}") from exc
+            raise LLMError(f"Request failed: {str(exc)}") from exc
 
     def _extract_stream_chunk(self, chunk_data: Dict[str, Any]) -> Optional[str]:
         """Extract text chunk from OpenAI streaming response."""
